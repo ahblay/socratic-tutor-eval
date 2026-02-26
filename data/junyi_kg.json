@@ -1,0 +1,444 @@
+{
+  "kcs": [
+    {
+      "id": "absolute-value",
+      "name": "Absolute Value",
+      "exercise_count": 27
+    },
+    {
+      "id": "addition-subtraction",
+      "name": "Addition Subtraction",
+      "exercise_count": 41
+    },
+    {
+      "id": "algebra-functions",
+      "name": "Algebra Functions",
+      "exercise_count": 18
+    },
+    {
+      "id": "area-perimeter-and-volume",
+      "name": "Area Perimeter And Volume",
+      "exercise_count": 33
+    },
+    {
+      "id": "basic-geometry",
+      "name": "Basic Geometry",
+      "exercise_count": 41
+    },
+    {
+      "id": "calculus",
+      "name": "Calculus",
+      "exercise_count": 10
+    },
+    {
+      "id": "circle-properties",
+      "name": "Circle Properties",
+      "exercise_count": 14
+    },
+    {
+      "id": "complex-numbers",
+      "name": "Complex Numbers",
+      "exercise_count": 8
+    },
+    {
+      "id": "congruent-triangles",
+      "name": "Congruent Triangles",
+      "exercise_count": 16
+    },
+    {
+      "id": "conic-sections",
+      "name": "Conic Sections",
+      "exercise_count": 8
+    },
+    {
+      "id": "decimals",
+      "name": "Decimals",
+      "exercise_count": 50
+    },
+    {
+      "id": "exponents-radicals",
+      "name": "Exponents Radicals",
+      "exercise_count": 28
+    },
+    {
+      "id": "factors-multiples",
+      "name": "Factors Multiples",
+      "exercise_count": 19
+    },
+    {
+      "id": "fractions",
+      "name": "Fractions",
+      "exercise_count": 57
+    },
+    {
+      "id": "linear-equations-and-inequalitie",
+      "name": "Linear Equations And Inequalitie",
+      "exercise_count": 24
+    },
+    {
+      "id": "multiplication-division",
+      "name": "Multiplication Division",
+      "exercise_count": 28
+    },
+    {
+      "id": "order-of-operations",
+      "name": "Order Of Operations",
+      "exercise_count": 12
+    },
+    {
+      "id": "parallel-and-perpendicular-lines",
+      "name": "Parallel And Perpendicular Lines",
+      "exercise_count": 15
+    },
+    {
+      "id": "polynomials",
+      "name": "Polynomials",
+      "exercise_count": 30
+    },
+    {
+      "id": "probability",
+      "name": "Probability",
+      "exercise_count": 9
+    },
+    {
+      "id": "pythagorean-theorem",
+      "name": "Pythagorean Theorem",
+      "exercise_count": 5
+    },
+    {
+      "id": "quadrilaterals-and-polygons",
+      "name": "Quadrilaterals And Polygons",
+      "exercise_count": 11
+    },
+    {
+      "id": "quadtratics",
+      "name": "Quadtratics",
+      "exercise_count": 21
+    },
+    {
+      "id": "quantity-sense",
+      "name": "Quantity Sense",
+      "exercise_count": 7
+    },
+    {
+      "id": "rates-and-ratios",
+      "name": "Rates And Ratios",
+      "exercise_count": 29
+    },
+    {
+      "id": "ratio-percentage",
+      "name": "Ratio Percentage",
+      "exercise_count": 8
+    },
+    {
+      "id": "segments-and-angles",
+      "name": "Segments And Angles",
+      "exercise_count": 18
+    },
+    {
+      "id": "sequence_and_series",
+      "name": "Sequence And Series",
+      "exercise_count": 19
+    },
+    {
+      "id": "similar-triangle",
+      "name": "Similar Triangle",
+      "exercise_count": 13
+    },
+    {
+      "id": "solving-linear-equations-and-inequalities",
+      "name": "Solving Linear Equations And Inequalities",
+      "exercise_count": 53
+    },
+    {
+      "id": "statistics",
+      "name": "Statistics",
+      "exercise_count": 31
+    },
+    {
+      "id": "systems-of-eq-and-ineq",
+      "name": "Systems Of Eq And Ineq",
+      "exercise_count": 16
+    },
+    {
+      "id": "telling-time",
+      "name": "Telling Time",
+      "exercise_count": 15
+    },
+    {
+      "id": "transformations",
+      "name": "Transformations",
+      "exercise_count": 4
+    },
+    {
+      "id": "triangle-properties",
+      "name": "Triangle Properties",
+      "exercise_count": 14
+    },
+    {
+      "id": "trigonometry",
+      "name": "Trigonometry",
+      "exercise_count": 12
+    },
+    {
+      "id": "unit-conversion",
+      "name": "Unit Conversion",
+      "exercise_count": 16
+    },
+    {
+      "id": "vectors-matrix",
+      "name": "Vectors Matrix",
+      "exercise_count": 19
+    }
+  ],
+  "edges": [
+    {
+      "from": "absolute-value",
+      "to": "exponents-radicals"
+    },
+    {
+      "from": "addition-subtraction",
+      "to": "absolute-value"
+    },
+    {
+      "from": "addition-subtraction",
+      "to": "decimals"
+    },
+    {
+      "from": "addition-subtraction",
+      "to": "multiplication-division"
+    },
+    {
+      "from": "addition-subtraction",
+      "to": "telling-time"
+    },
+    {
+      "from": "algebra-functions",
+      "to": "rates-and-ratios"
+    },
+    {
+      "from": "area-perimeter-and-volume",
+      "to": "circle-properties"
+    },
+    {
+      "from": "basic-geometry",
+      "to": "area-perimeter-and-volume"
+    },
+    {
+      "from": "basic-geometry",
+      "to": "segments-and-angles"
+    },
+    {
+      "from": "congruent-triangles",
+      "to": "similar-triangle"
+    },
+    {
+      "from": "congruent-triangles",
+      "to": "trigonometry"
+    },
+    {
+      "from": "decimals",
+      "to": "absolute-value"
+    },
+    {
+      "from": "decimals",
+      "to": "area-perimeter-and-volume"
+    },
+    {
+      "from": "decimals",
+      "to": "rates-and-ratios"
+    },
+    {
+      "from": "decimals",
+      "to": "unit-conversion"
+    },
+    {
+      "from": "exponents-radicals",
+      "to": "probability"
+    },
+    {
+      "from": "exponents-radicals",
+      "to": "pythagorean-theorem"
+    },
+    {
+      "from": "exponents-radicals",
+      "to": "solving-linear-equations-and-inequalities"
+    },
+    {
+      "from": "factors-multiples",
+      "to": "fractions"
+    },
+    {
+      "from": "fractions",
+      "to": "decimals"
+    },
+    {
+      "from": "fractions",
+      "to": "probability"
+    },
+    {
+      "from": "fractions",
+      "to": "rates-and-ratios"
+    },
+    {
+      "from": "fractions",
+      "to": "ratio-percentage"
+    },
+    {
+      "from": "fractions",
+      "to": "solving-linear-equations-and-inequalities"
+    },
+    {
+      "from": "linear-equations-and-inequalitie",
+      "to": "complex-numbers"
+    },
+    {
+      "from": "linear-equations-and-inequalitie",
+      "to": "polynomials"
+    },
+    {
+      "from": "linear-equations-and-inequalitie",
+      "to": "solving-linear-equations-and-inequalities"
+    },
+    {
+      "from": "linear-equations-and-inequalitie",
+      "to": "systems-of-eq-and-ineq"
+    },
+    {
+      "from": "linear-equations-and-inequalitie",
+      "to": "vectors-matrix"
+    },
+    {
+      "from": "multiplication-division",
+      "to": "absolute-value"
+    },
+    {
+      "from": "multiplication-division",
+      "to": "decimals"
+    },
+    {
+      "from": "multiplication-division",
+      "to": "factors-multiples"
+    },
+    {
+      "from": "multiplication-division",
+      "to": "statistics"
+    },
+    {
+      "from": "multiplication-division",
+      "to": "telling-time"
+    },
+    {
+      "from": "order-of-operations",
+      "to": "absolute-value"
+    },
+    {
+      "from": "order-of-operations",
+      "to": "basic-geometry"
+    },
+    {
+      "from": "order-of-operations",
+      "to": "fractions"
+    },
+    {
+      "from": "order-of-operations",
+      "to": "statistics"
+    },
+    {
+      "from": "parallel-and-perpendicular-lines",
+      "to": "congruent-triangles"
+    },
+    {
+      "from": "polynomials",
+      "to": "complex-numbers"
+    },
+    {
+      "from": "polynomials",
+      "to": "conic-sections"
+    },
+    {
+      "from": "polynomials",
+      "to": "quadtratics"
+    },
+    {
+      "from": "probability",
+      "to": "sequence_and_series"
+    },
+    {
+      "from": "pythagorean-theorem",
+      "to": "complex-numbers"
+    },
+    {
+      "from": "pythagorean-theorem",
+      "to": "trigonometry"
+    },
+    {
+      "from": "quadtratics",
+      "to": "calculus"
+    },
+    {
+      "from": "quadtratics",
+      "to": "conic-sections"
+    },
+    {
+      "from": "segments-and-angles",
+      "to": "parallel-and-perpendicular-lines"
+    },
+    {
+      "from": "segments-and-angles",
+      "to": "sequence_and_series"
+    },
+    {
+      "from": "segments-and-angles",
+      "to": "triangle-properties"
+    },
+    {
+      "from": "similar-triangle",
+      "to": "transformations"
+    },
+    {
+      "from": "solving-linear-equations-and-inequalities",
+      "to": "algebra-functions"
+    },
+    {
+      "from": "solving-linear-equations-and-inequalities",
+      "to": "quadtratics"
+    },
+    {
+      "from": "solving-linear-equations-and-inequalities",
+      "to": "vectors-matrix"
+    },
+    {
+      "from": "statistics",
+      "to": "complex-numbers"
+    },
+    {
+      "from": "systems-of-eq-and-ineq",
+      "to": "quadtratics"
+    },
+    {
+      "from": "systems-of-eq-and-ineq",
+      "to": "vectors-matrix"
+    },
+    {
+      "from": "telling-time",
+      "to": "rates-and-ratios"
+    },
+    {
+      "from": "triangle-properties",
+      "to": "area-perimeter-and-volume"
+    },
+    {
+      "from": "triangle-properties",
+      "to": "congruent-triangles"
+    },
+    {
+      "from": "triangle-properties",
+      "to": "quadrilaterals-and-polygons"
+    },
+    {
+      "from": "trigonometry",
+      "to": "calculus"
+    }
+  ]
+}

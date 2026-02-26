@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Raw Junyi dataset (13 GB — too large for git)
+data/junyi/
+
+# Session-specific files
+conversation.jsonl
+.socratic-session.json

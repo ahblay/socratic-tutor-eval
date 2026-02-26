@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Knowledge Graph — Socratic Tutor Session</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: #0f172a; color: #e2e8f0; height: 100vh;
+         display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── header ── */
+  header { padding: 10px 20px; background: #1e293b; border-bottom: 1px solid #334155;
+           display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  header h1 { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase;
+              letter-spacing: .08em; }
+  .turn-badge { background: #3b82f6; color: #fff; font-size: 13px; font-weight: 700;
+                padding: 2px 10px; border-radius: 99px; }
+
+  /* ── main layout ── */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── graph panel ── */
+  .graph-wrap { flex: 0 0 54%; display: flex; flex-direction: column;
+                border-right: 1px solid #1e293b; }
+  .graph-title { font-size: 11px; color: #64748b; text-transform: uppercase;
+                 letter-spacing: .1em; padding: 8px 16px 4px; flex-shrink: 0; }
+  svg#kg { flex: 1; width: 100%; }
+
+  /* ── side panel ── */
+  .side { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .dialogue { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex;
+              flex-direction: column; gap: 10px; }
+  .bubble { border-radius: 8px; padding: 10px 13px; font-size: 13px; line-height: 1.55;
+            max-width: 100%; }
+  .bubble.tutor  { background: #1e3a5f; border-left: 3px solid #3b82f6; color: #bfdbfe; }
+  .bubble.student{ background: #1e293b; border-left: 3px solid #475569; color: #cbd5e1; }
+  .bubble-label  { font-size: 10px; font-weight: 700; letter-spacing: .08em;
+                   text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+  .empty-state   { color: #475569; font-size: 13px; font-style: italic;
+                   margin: auto; text-align: center; padding: 20px; }
+
+  /* ── observations ── */
+  .obs-section { padding: 8px 16px; border-top: 1px solid #1e293b; flex-shrink: 0; }
+  .obs-title { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;
+               letter-spacing: .08em; margin-bottom: 6px; }
+  .obs-list { display: flex; flex-wrap: wrap; gap: 5px; min-height: 22px; }
+  .obs-chip { font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 600;
+              display: flex; align-items: center; gap: 4px; }
+
+  /* ── mastery bars ── */
+  .mastery-section { padding: 8px 16px 10px; border-top: 1px solid #1e293b;
+                     flex-shrink: 0; background: #0f172a; }
+  .mastery-title { font-size: 10px; font-weight: 700; color: #64748b;
+                   text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+  .bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .bar-label { font-size: 11px; color: #94a3b8; width: 160px; flex-shrink: 0;
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { flex: 1; background: #1e293b; border-radius: 99px; height: 8px;
+               overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 99px; transition: width .5s ease, background .5s ease; }
+  .bar-val { font-size: 10px; color: #64748b; width: 36px; text-align: right; flex-shrink: 0; }
+
+  /* ── timeline ── */
+  .timeline { background: #1e293b; border-top: 1px solid #334155; padding: 10px 20px;
+              display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+  .tl-label { font-size: 11px; color: #64748b; white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: #3b82f6; cursor: pointer; }
+  .tl-btn { background: #334155; border: none; color: #94a3b8; border-radius: 6px;
+            padding: 4px 10px; cursor: pointer; font-size: 13px; }
+  .tl-btn:hover { background: #475569; color: #e2e8f0; }
+  .tl-ticks { display: flex; justify-content: space-between; font-size: 10px;
+              color: #475569; padding: 0 2px; flex: 1; pointer-events: none; }
+
+  /* ── SVG node animations ── */
+  @keyframes pulse { 0%,100%{stroke-opacity:.9;stroke-width:3} 50%{stroke-opacity:.4;stroke-width:5} }
+  .frontier-ring { animation: pulse 1.6s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Socratic Tutor · Knowledge Graph Evolution</h1>
+  <span class="turn-badge" id="hdr-turn">Initial state</span>
+  <span style="margin-left:auto;font-size:12px;color:#64748b;" id="hdr-frontier"></span>
+</header>
+
+<div class="main">
+
+  <!-- ── Graph ── -->
+  <div class="graph-wrap">
+    <div class="graph-title">Bayesian knowledge state · target subgraph</div>
+    <svg id="kg" viewBox="0 0 560 560" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+
+  <!-- ── Side panel ── -->
+  <div class="side">
+    <div class="dialogue" id="dialogue">
+      <div class="empty-state">← Move the slider to step through the session</div>
+    </div>
+
+    <div class="obs-section">
+      <div class="obs-title">Observations this turn</div>
+      <div class="obs-list" id="obs-list"></div>
+    </div>
+
+    <div class="mastery-section">
+      <div class="mastery-title">Target KC mastery</div>
+      <div id="bars"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Timeline ── -->
+<div class="timeline">
+  <span class="tl-label">Turn</span>
+  <button class="tl-btn" id="btn-prev">&#8592;</button>
+  <div style="flex:1;display:flex;flex-direction:column;gap:3px;">
+    <input type="range" id="slider" min="0" max="8" value="0" step="1">
+    <div class="tl-ticks" id="tl-ticks"></div>
+  </div>
+  <button class="tl-btn" id="btn-next">&#8594;</button>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TARGET_KCS = ['factors-multiples','fractions','rates-and-ratios','ratio-percentage'];
+const ALL_DISPLAY = [
+  'addition-subtraction','order-of-operations','multiplication-division',
+  'factors-multiples','fractions','rates-and-ratios','ratio-percentage'
+];
+
+const KC_LABELS = {
+  'addition-subtraction':    'Addition &\nSubtraction',
+  'order-of-operations':     'Order of\nOperations',
+  'multiplication-division': 'Multiplication\n& Division',
+  'factors-multiples':       'Factors &\nMultiples',
+  'fractions':               'Fractions',
+  'rates-and-ratios':        'Rates &\nRatios',
+  'ratio-percentage':        'Ratio &\nPercentage',
+};
+
+// Graph topology (x, y positions in the 560×560 viewBox)
+const NODES = {
+  'addition-subtraction':    { x: 130, y: 75,  r: 34, prereq: true  },
+  'order-of-operations':     { x: 430, y: 75,  r: 34, prereq: true  },
+  'multiplication-division': { x: 130, y: 195, r: 34, prereq: true  },
+  'factors-multiples':       { x: 130, y: 315, r: 38, prereq: false },
+  'fractions':               { x: 280, y: 415, r: 42, prereq: false },
+  'rates-and-ratios':        { x: 150, y: 510, r: 38, prereq: false },
+  'ratio-percentage':        { x: 410, y: 510, r: 38, prereq: false },
+};
+
+const EDGES = [
+  ['addition-subtraction',    'multiplication-division'],
+  ['multiplication-division', 'factors-multiples'],
+  ['factors-multiples',       'fractions'],
+  ['order-of-operations',     'fractions'],
+  ['fractions',               'rates-and-ratios'],
+  ['fractions',               'ratio-percentage'],
+];
+
+// Turn-by-turn data extracted from the run log
+const TURNS = [
+  {
+    turn: 0, label: 'Initial',
+    bkt: {
+      'addition-subtraction': 0.9, 'order-of-operations': 0.9, 'multiplication-division': 0.9,
+      'factors-multiples': 0.10, 'fractions': 0.10, 'rates-and-ratios': 0.10, 'ratio-percentage': 0.10
+    },
+    frontier: ['factors-multiples'],
+    student: null, tutor: null, observations: []
+  },
+  {
+    turn: 1, label: 'Turn 1',
+    bkt: {
+      'addition-subtraction': 0.878, 'order-of-operations': 0.878, 'multiplication-division': 0.878,
+      'factors-multiples': 0.113, 'fractions': 0.296, 'rates-and-ratios': 0.109, 'ratio-percentage': 0.109
+    },
+    frontier: ['factors-multiples'],
+    student: "I haven't really studied factors and fractions yet, so I'm pretty much starting from scratch here! I mean, I've heard the word \"factor\" before — like, people talk about something being \"a major factor.\" So I'm guessing a factor is like... something that contributes to something else? I think a fraction is like a part of something?",
+    tutor: "Good — that everyday sense of \"factor\" is actually a useful starting point. You mentioned a factor is \"something that goes into making something.\" In math, we use a very specific version of that idea. Let's start with a concrete number: what multiplications can you think of that give you the answer 12?",
+    observations: [
+      { kc: 'factors-multiples', cls: 'misconception',      quote: '"something that contributes to something else"' },
+      { kc: 'fractions',         cls: 'weak_articulation',  quote: '"a part of something"' },
+      { kc: 'multiplication-division', cls: 'weak_articulation', quote: '"comfortable with multiplication, division"' },
+    ]
+  },
+  {
+    turn: 2, label: 'Turn 2',
+    bkt: {
+      'addition-subtraction': 0.879, 'order-of-operations': 0.879, 'multiplication-division': 0.966,
+      'factors-multiples': 0.316, 'fractions': 0.303, 'rates-and-ratios': 0.118, 'ratio-percentage': 0.118
+    },
+    frontier: ['factors-multiples'],
+    student: "Good question! Let me think through this... So I need to find multiplications that equal 12. Well: 1×12=12, 2×6=12, 3×4=12. And I guess you could also flip them around. So the distinct pairs are: 1 and 12, 2 and 6, and 3 and 4. Are these the factors?",
+    tutor: "You noticed something important — the pairs are the same just flipped. So let's pull out the individual numbers from those pairs. What is the complete list of individual numbers you'd extract from those three pairs?",
+    observations: [
+      { kc: 'factors-multiples',       cls: 'weak_articulation',   quote: '"Are these the factors?"' },
+      { kc: 'multiplication-division', cls: 'strong_articulation', quote: '1×12=12, 2×6=12, 3×4=12 — all correct' },
+    ]
+  },
+  {
+    turn: 3, label: 'Turn 3',
+    bkt: {
+      'addition-subtraction': 0.880, 'order-of-operations': 0.880, 'multiplication-division': 0.967,
+      'factors-multiples': 0.535, 'fractions': 0.310, 'rates-and-ratios': 0.127, 'ratio-percentage': 0.127
+    },
+    frontier: ['factors-multiples'],
+    student: "Okay, so if I pull out all the individual numbers from those pairs: From (1,12): 1 and 12. From (2,6): 2 and 6. From (3,4): 3 and 4. So the complete list would be: 1, 2, 3, 4, 6, and 12. And every single one is a number that, when multiplied by another on the list, gives 12. Are these the factors?",
+    tutor: "You've got the list. Now try this: what happens when you divide 12 by any of those numbers?",
+    observations: [
+      { kc: 'factors-multiples', cls: 'weak_articulation', quote: '"every one multiplied by another gives 12"' },
+    ]
+  },
+  {
+    turn: 4, label: 'Turn 4',
+    bkt: {
+      'addition-subtraction': 0.881, 'order-of-operations': 0.881, 'multiplication-division': 0.992,
+      'factors-multiples': 0.674, 'fractions': 0.317, 'rates-and-ratios': 0.136, 'ratio-percentage': 0.136
+    },
+    frontier: ['factors-multiples'],
+    student: "Okay, let me try dividing 12 by each of those numbers: 12÷1=12, 12÷2=6, 12÷3=4, 12÷4=3, 12÷6=2, 12÷12=1. Oh wow, that's interesting! Every single division comes out to a whole number with no remainder. Is that what makes them factors? Like, factors are the numbers that divide evenly into another number?",
+    tutor: "You've arrived somewhere interesting — hold onto that idea. Now here's a question: how would you know if you had missed a factor? Could you have left one out without realizing it?",
+    observations: [
+      { kc: 'factors-multiples',       cls: 'weak_articulation',   quote: '"factors divide evenly, no remainder?"' },
+      { kc: 'multiplication-division', cls: 'strong_articulation', quote: 'All 6 divisions computed correctly' },
+    ]
+  },
+  {
+    turn: 5, label: 'Turn 5',
+    bkt: {
+      'addition-subtraction': 0.882, 'order-of-operations': 0.882, 'multiplication-division': 0.998,
+      'factors-multiples': 0.893, 'fractions': 0.324, 'rates-and-ratios': 0.144, 'ratio-percentage': 0.144
+    },
+    frontier: ['fractions'],
+    student: "That's a really good question — it makes me think I should check more carefully. So I found 1, 2, 3, 4, 6, and 12. But what about numbers I didn't test? Like 5, or 7? Let me check: 12÷5=2.4 (decimal), 12÷7 doesn't work neatly either. And any number bigger than 12 would give something less than 1. So I think I actually did find them all.",
+    tutor: "You just described checking every number from 1 to 12 as one verification strategy. But you also noticed something earlier that gives you a shortcut — you said the pairs are \"the same ones, just flipped.\" What does that tell you about how far you really need to check?",
+    observations: [
+      { kc: 'factors-multiples',       cls: 'strong_articulation', quote: 'Systematic verification + boundary reasoning' },
+      { kc: 'multiplication-division', cls: 'strong_articulation', quote: '12÷5=2.4, correctly identified as non-factor' },
+    ]
+  },
+  {
+    turn: 6, label: 'Turn 6',
+    bkt: {
+      'addition-subtraction': 0.884, 'order-of-operations': 0.884, 'multiplication-division': 0.996,
+      'factors-multiples': 0.971, 'fractions': 0.331, 'rates-and-ratios': 0.153, 'ratio-percentage': 0.153
+    },
+    frontier: ['fractions'],
+    student: "Ohh, that's a really clever observation! So looking at my pairs: 1×12 (1 much smaller than 12), 2×6, 3×4 (almost equal). When I check 4, I'd just get the pair 4×3 again — backwards. So I should stop checking once one factor is ≥ the other. I really only needed to check up to about √12!",
+    tutor: "You've nailed the logic there — check that for yourself with a different number when you get a chance. Let's pivot. You started by saying a fraction is \"a part of something.\" You've been working with 12 equal pieces. If you have 3 of those pieces, how would you write that mathematically?",
+    observations: [
+      { kc: 'factors-multiples', cls: 'strong_articulation', quote: 'Discovered √n bound for factor checking' },
+    ]
+  },
+  {
+    turn: 7, label: 'Turn 7',
+    bkt: {
+      'addition-subtraction': 0.885, 'order-of-operations': 0.885, 'multiplication-division': 0.993,
+      'factors-multiples': 0.971, 'fractions': 0.676, 'rates-and-ratios': 0.161, 'ratio-percentage': 0.161
+    },
+    frontier: ['fractions'],
+    student: "Hmm, okay, so I have 12 equal pieces total, and I'm taking 3 of them. So... 3 out of 12, right? That's what I have compared to the whole thing. I'm thinking about how to write that mathematically. I've seen notation like one number on top and one number on the bottom with a line between them. So would it be written as 3/12? Where the 3 is the pieces I have and the 12 is the total? And would I call that a fraction?",
+    tutor: "You've written it down — 3 on top, 12 on the bottom. Now look at those two numbers. Are they playing the same role in that fraction, or different roles?",
+    observations: [
+      { kc: 'fractions',               cls: 'strong_articulation', quote: '"3/12 — 3 pieces I have, 12 the total"' },
+      { kc: 'multiplication-division', cls: 'weak_articulation',   quote: '"I know division well"' },
+    ]
+  },
+  {
+    turn: 8, label: 'Turn 8',
+    bkt: {
+      'addition-subtraction': 0.886, 'order-of-operations': 0.886, 'multiplication-division': 0.993,
+      'factors-multiples': 0.972, 'fractions': 0.894, 'rates-and-ratios': 0.170, 'ratio-percentage': 0.170
+    },
+    frontier: ['ratio-percentage'],
+    student: "Oh, definitely different roles! The 3 is the number of pieces I actually have — it's the part I'm talking about. But the 12 is the total number of pieces that make up the whole thing. So the 3 on top must be the part, and the 12 on the bottom must be the whole. And I guess that's why people write it this way — to show which number is which role. The top one shows what you have, the bottom one shows the total?",
+    tutor: "Good — they're playing different roles. Now push on the 12 a little more. You said it represents \"the total pieces.\" But if I had the same whole divided into 6 pieces instead of 12 — would each piece be the same size?",
+    observations: [
+      { kc: 'fractions', cls: 'strong_articulation', quote: '"top = part, bottom = whole — that\'s why it\'s written this way"' },
+    ]
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLOUR HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function masteryColor(p) {
+  // 0.10 → cool gray; 0.5 → amber; 0.9+ → green
+  if (p <= 0.15) return '#334155';      // dark slate (absent)
+  const stops = [
+    [0.15, [51,  65, 85]],    // slate
+    [0.40, [146,109,  5]],    // dark amber
+    [0.70, [101,163, 13]],    // lime
+    [1.00, [ 34,197, 94]],    // emerald
+  ];
+  for (let i = 1; i < stops.length; i++) {
+    const [t1, c1] = stops[i-1];
+    const [t2, c2] = stops[i];
+    if (p <= t2) {
+      const t = (p - t1) / (t2 - t1);
+      const r = Math.round(c1[0] + t*(c2[0]-c1[0]));
+      const g = Math.round(c1[1] + t*(c2[1]-c1[1]));
+      const b = Math.round(c1[2] + t*(c2[2]-c1[2]));
+      return `rgb(${r},${g},${b})`;
+    }
+  }
+  return 'rgb(34,197,94)';
+}
+
+const OBS_META = {
+  strong_articulation: { label: 'Strong articulation',    bg: '#14532d', fg: '#86efac' },
+  weak_articulation:   { label: 'Emerging understanding', bg: '#713f12', fg: '#fde68a' },
+  guided_recognition:  { label: 'Guided recognition',     bg: '#7c2d12', fg: '#fdba74' },
+  misconception:       { label: 'Misconception',          bg: '#7f1d1d', fg: '#fca5a5' },
+  absent:              { label: 'Not engaged',            bg: '#1e293b', fg: '#94a3b8' },
+  contradiction:       { label: 'Contradiction',          bg: '#581c87', fg: '#d8b4fe' },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SVG GRAPH
+// ─────────────────────────────────────────────────────────────────────────────
+
+const svg = document.getElementById('kg');
+const NS  = 'http://www.w3.org/2000/svg';
+
+function el(tag, attrs, children) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k,v] of Object.entries(attrs||{})) e.setAttribute(k, v);
+  for (const c of (children||[])) e.appendChild(c);
+  return e;
+}
+
+// Arrow marker
+const defs = el('defs');
+const marker = el('marker', { id:'arrow', markerWidth:'8', markerHeight:'8',
+  refX:'6', refY:'3', orient:'auto' });
+marker.appendChild(el('path', { d:'M0,0 L0,6 L8,3 z', fill:'#475569' }));
+defs.appendChild(marker);
+svg.appendChild(defs);
+
+// Edge layer
+const edgeLayer = el('g', { id: 'edges' });
+svg.appendChild(edgeLayer);
+
+// Draw edges
+for (const [from, to] of EDGES) {
+  const n1 = NODES[from], n2 = NODES[to];
+  const dx = n2.x - n1.x, dy = n2.y - n1.y;
+  const dist = Math.hypot(dx, dy);
+  const sx = n1.x + dx/dist*n1.r, sy = n1.y + dy/dist*n1.r;
+  const ex = n2.x - dx/dist*(n2.r+8), ey = n2.y - dy/dist*(n2.r+8);
+  edgeLayer.appendChild(el('line', {
+    x1:sx, y1:sy, x2:ex, y2:ey,
+    stroke:'#475569', 'stroke-width':'1.5',
+    'marker-end':'url(#arrow)',
+  }));
+}
+
+// Node layer
+const nodeLayer = el('g', { id: 'nodes' });
+svg.appendChild(nodeLayer);
+
+const nodeEls = {};  // id → { circle, ring, text }
+
+for (const [id, n] of Object.entries(NODES)) {
+  const g = el('g', { transform: `translate(${n.x},${n.y})` });
+
+  // Frontier pulse ring (hidden by default)
+  const ring = el('circle', {
+    r: n.r + 7, fill: 'none',
+    stroke: '#f59e0b', 'stroke-width': '3',
+    opacity: '0', class: 'frontier-ring',
+  });
+
+  // Main circle
+  const circle = el('circle', {
+    r: n.r, fill: '#1e293b',
+    stroke: n.prereq ? '#475569' : '#64748b',
+    'stroke-width': n.prereq ? '1.5' : '2',
+    style: 'transition: fill .5s ease, stroke .5s ease',
+  });
+
+  // Label — split on \n
+  const lines = (KC_LABELS[id]||id).split('\n');
+  const textG = el('g');
+  const dy = lines.length > 1 ? -7 : 0;
+  lines.forEach((line, i) => {
+    textG.appendChild(el('text', {
+      x:'0', y: String(dy + i*14),
+      'text-anchor':'middle', 'dominant-baseline':'middle',
+      fill: '#e2e8f0',
+      'font-size': n.prereq ? '9' : '10',
+      'font-weight': n.prereq ? '400' : '600',
+      'pointer-events': 'none',
+    }, [document.createTextNode(line)]));
+  });
+
+  g.appendChild(ring);
+  g.appendChild(circle);
+  g.appendChild(textG);
+  nodeLayer.appendChild(g);
+  nodeEls[id] = { circle, ring };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MASTERY BARS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const barsEl = document.getElementById('bars');
+const barFills = {};
+
+for (const kc of TARGET_KCS) {
+  const label = (KC_LABELS[kc]||kc).replace('\n',' ');
+  const row = document.createElement('div');
+  row.className = 'bar-row';
+  row.innerHTML = `
+    <span class="bar-label">${label}</span>
+    <div class="bar-track"><div class="bar-fill" id="bar-${kc}" style="width:0%;background:#334155"></div></div>
+    <span class="bar-val" id="barval-${kc}">0.10</span>
+  `;
+  barsEl.appendChild(row);
+  barFills[kc] = {
+    fill: document.getElementById(`bar-${kc}`),
+    val:  document.getElementById(`barval-${kc}`),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────────────────
+
+function render(turnIdx) {
+  const data = TURNS[turnIdx];
+
+  // Header
+  document.getElementById('hdr-turn').textContent =
+    turnIdx === 0 ? 'Initial state' : `Turn ${data.turn} / 8`;
+  document.getElementById('hdr-frontier').textContent =
+    data.frontier.length
+      ? 'Frontier: ' + data.frontier.map(k => (KC_LABELS[k]||k).replace('\n',' ')).join(', ')
+      : '';
+
+  // Node colours + frontier rings
+  for (const [id, els] of Object.entries(nodeEls)) {
+    const p = data.bkt[id] ?? 0.1;
+    els.circle.style.fill   = masteryColor(p);
+    els.circle.style.stroke = NODES[id].prereq ? '#475569' : '#94a3b8';
+    const onFrontier = data.frontier.includes(id);
+    els.ring.setAttribute('opacity', onFrontier ? '1' : '0');
+  }
+
+  // Mastery bars
+  for (const kc of TARGET_KCS) {
+    const p = data.bkt[kc] ?? 0.1;
+    const pct = Math.round(p * 100);
+    barFills[kc].fill.style.width      = pct + '%';
+    barFills[kc].fill.style.background = masteryColor(p);
+    barFills[kc].val.textContent       = p.toFixed(2);
+  }
+
+  // Dialogue
+  const dlg = document.getElementById('dialogue');
+  if (!data.tutor) {
+    dlg.innerHTML = '<div class="empty-state">← Session not yet started<br><small>Advance the slider to begin</small></div>';
+  } else {
+    dlg.innerHTML = `
+      <div class="bubble student">
+        <div class="bubble-label">Student</div>
+        ${escHtml(data.student)}
+      </div>
+      <div class="bubble tutor">
+        <div class="bubble-label">Tutor</div>
+        ${escHtml(data.tutor)}
+      </div>
+    `;
+  }
+
+  // Observations
+  const obsList = document.getElementById('obs-list');
+  obsList.innerHTML = '';
+  if (!data.observations.length) {
+    obsList.innerHTML = '<span style="font-size:11px;color:#475569;font-style:italic">None recorded</span>';
+  } else {
+    for (const obs of data.observations) {
+      const meta = OBS_META[obs.cls] || OBS_META.absent;
+      const chip = document.createElement('span');
+      chip.className = 'obs-chip';
+      chip.style.background = meta.bg;
+      chip.style.color       = meta.fg;
+      const kcLabel = (KC_LABELS[obs.kc]||obs.kc).replace('\n',' ');
+      chip.title = obs.quote;
+      chip.textContent = `${kcLabel} · ${meta.label}`;
+      obsList.appendChild(chip);
+    }
+  }
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTROLS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const slider = document.getElementById('slider');
+
+// Build tick labels
+const ticks = document.getElementById('tl-ticks');
+for (let i = 0; i <= 8; i++) {
+  const t = document.createElement('span');
+  t.textContent = i === 0 ? 'Init' : i;
+  ticks.appendChild(t);
+}
+
+slider.addEventListener('input', () => render(parseInt(slider.value)));
+
+document.getElementById('btn-prev').addEventListener('click', () => {
+  const v = Math.max(0, parseInt(slider.value) - 1);
+  slider.value = v; render(v);
+});
+document.getElementById('btn-next').addEventListener('click', () => {
+  const v = Math.min(8, parseInt(slider.value) + 1);
+  slider.value = v; render(v);
+});
+
+// Initial render
+render(0);
+</script>
+</body>
+</html>

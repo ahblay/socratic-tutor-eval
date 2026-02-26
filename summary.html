@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Socratic Tutor Evaluation Framework — Summary</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f172a;
+    --surface:   #1e293b;
+    --surface2:  #273449;
+    --border:    #334155;
+    --text:      #e2e8f0;
+    --muted:     #94a3b8;
+    --faint:     #475569;
+    --blue:      #3b82f6;
+    --blue-dim:  #1e3a5f;
+    --green:     #22c55e;
+    --green-dim: #14532d;
+    --amber:     #f59e0b;
+    --amber-dim: #78350f;
+    --red-dim:   #7f1d1d;
+    --red:       #f87171;
+    --purple-dim:#4c1d95;
+    --purple:    #c4b5fd;
+    --mono:      "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    font-size: 15px;
+  }
+
+  /* ── Layout ── */
+  .page { display: flex; min-height: 100vh; }
+
+  nav {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    width: 230px; flex-shrink: 0;
+    background: var(--surface); border-right: 1px solid var(--border);
+    padding: 28px 0;
+  }
+  nav .nav-logo {
+    font-size: 11px; font-weight: 700; color: var(--faint);
+    text-transform: uppercase; letter-spacing: .1em;
+    padding: 0 20px 20px; border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  nav ul { list-style: none; }
+  nav li a {
+    display: block; padding: 5px 20px;
+    font-size: 13px; color: var(--muted); text-decoration: none;
+    border-left: 2px solid transparent; transition: all .15s;
+  }
+  nav li a:hover { color: var(--text); border-left-color: var(--blue); background: var(--surface2); }
+  nav li.section > a {
+    font-size: 11px; font-weight: 700; color: var(--faint);
+    text-transform: uppercase; letter-spacing: .08em;
+    margin-top: 14px; cursor: default; pointer-events: none;
+  }
+
+  main {
+    flex: 1; max-width: 860px; padding: 52px 56px 80px;
+    min-width: 0;
+  }
+
+  /* ── Typography ── */
+  h1 { font-size: 28px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 40px; }
+
+  h2 {
+    font-size: 18px; font-weight: 700; color: var(--text);
+    margin: 48px 0 14px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  h2:first-of-type { margin-top: 0; border-top: none; }
+
+  h3 { font-size: 14px; font-weight: 700; color: var(--blue); margin: 28px 0 10px;
+       text-transform: uppercase; letter-spacing: .06em; }
+
+  p { margin-bottom: 14px; color: var(--text); }
+  p:last-child { margin-bottom: 0; }
+
+  strong { color: var(--text); font-weight: 600; }
+
+  /* ── Code ── */
+  code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--surface2); color: #93c5fd;
+    padding: 1px 5px; border-radius: 4px;
+  }
+  pre {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 18px; overflow-x: auto;
+    margin: 12px 0 18px; line-height: 1.6; color: #93c5fd;
+  }
+
+  /* ── Tables ── */
+  .table-wrap { overflow-x: auto; margin: 12px 0 18px; }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  thead th {
+    background: var(--surface2); color: var(--muted);
+    font-weight: 600; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .07em; padding: 8px 12px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td {
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    vertical-align: top; color: var(--text);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface2); }
+
+  /* ── Cards / callouts ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin: 12px 0 18px;
+  }
+  .callout {
+    border-radius: 8px; padding: 13px 16px; margin: 12px 0 18px;
+    font-size: 13.5px; display: flex; gap: 10px;
+  }
+  .callout-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .callout.info  { background: var(--blue-dim);   border-left: 3px solid var(--blue); }
+  .callout.warn  { background: var(--amber-dim);  border-left: 3px solid var(--amber); color: #fde68a; }
+  .callout.note  { background: var(--surface2);   border-left: 3px solid var(--faint); color: var(--muted); }
+
+  /* ── Agent cards ── */
+  .agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 18px; }
+  .agent-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .agent-card h4 {
+    font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .agent-card p { font-size: 13px; color: var(--muted); margin-bottom: 0; }
+  .agent-tag {
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px;
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  .tag-existing { background: var(--green-dim);  color: #86efac; }
+  .tag-new      { background: var(--blue-dim);   color: #93c5fd; }
+
+  /* ── Metric cards ── */
+  .metric-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px 22px; margin: 12px 0 18px;
+  }
+  .metric-header {
+    display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px;
+  }
+  .metric-abbr {
+    font-size: 20px; font-weight: 800; font-family: var(--mono); color: var(--blue);
+  }
+  .metric-name { font-size: 13px; color: var(--muted); }
+  .metric-formula {
+    font-family: var(--mono); font-size: 13px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; margin: 10px 0;
+    color: #c4b5fd;
+  }
+  .metric-card p { font-size: 13.5px; color: var(--text); }
+
+  /* ── Profile chips ── */
+  .profile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0; }
+  .profile-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .profile-card h4 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; font-family: var(--mono); }
+  .profile-card p  { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .pill {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 1px 7px; border-radius: 99px; margin: 1px;
+  }
+
+  /* ── DAG diagram ── */
+  .dag { display: flex; flex-direction: column; align-items: center; gap: 0;
+         margin: 16px 0; font-size: 12px; }
+  .dag-row { display: flex; gap: 10px; align-items: center; justify-content: center; }
+  .dag-node {
+    padding: 5px 12px; border-radius: 6px; font-family: var(--mono);
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+    border: 1px solid;
+  }
+  .dag-node.prereq  { background: var(--surface2); color: var(--muted); border-color: var(--faint); }
+  .dag-node.target  { background: var(--blue-dim); color: #93c5fd;      border-color: var(--blue); }
+  .dag-node.leaf    { background: var(--green-dim); color: #86efac;     border-color: var(--green); }
+  .dag-arrow { color: var(--faint); font-size: 14px; user-select: none; }
+  .dag-connector { width: 1px; height: 16px; background: var(--faint); margin: 0 auto; }
+  .dag-fork { display: flex; gap: 40px; }
+
+  /* ── Obs class list ── */
+  .obs-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 16px; }
+  .obs-row { display: flex; align-items: baseline; gap: 10px; }
+  .obs-chip {
+    font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 99px;
+    white-space: nowrap; flex-shrink: 0; min-width: 160px; text-align: center;
+  }
+  .obs-desc { font-size: 13px; color: var(--muted); }
+
+  /* ── File tree ── */
+  .file-tree {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.9;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 20px; color: var(--muted);
+    margin: 12px 0 18px;
+  }
+  .file-tree .dir  { color: #93c5fd; }
+  .file-tree .file { color: var(--text); }
+  .file-tree .desc { color: var(--faint); }
+
+  /* ── Limitation list ── */
+  ol.limits { padding-left: 20px; display: flex; flex-direction: column; gap: 12px; }
+  ol.limits li { color: var(--text); font-size: 14px; }
+  ol.limits li strong { color: var(--amber); }
+
+  /* ── Divider ── */
+  hr { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
+
+  /* ── Composite breakdown ── */
+  .composite-row { display: flex; gap: 8px; align-items: stretch; margin: 14px 0; flex-wrap: wrap; }
+  .comp-block {
+    flex: 1; min-width: 80px; border-radius: 8px; padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--border);
+    text-align: center;
+  }
+  .comp-block .weight { font-size: 22px; font-weight: 800; font-family: var(--mono); }
+  .comp-block .label  { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .comp-block.nac  .weight { color: #f87171; }
+  .comp-block.kft  .weight { color: #fb923c; }
+  .comp-block.tba  .weight { color: #facc15; }
+  .comp-block.mrq  .weight { color: #34d399; }
+  .comp-block.rs   .weight { color: #a78bfa; }
+  .comp-op { font-size: 20px; color: var(--faint); display: flex; align-items: center; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ── Sidebar nav ── -->
+<nav>
+  <div class="nav-logo">Evaluation Framework</div>
+  <ul>
+    <li class="section"><a href="#">Overview</a></li>
+    <li><a href="#overview">Introduction</a></li>
+    <li><a href="#dataset">Knowledge Graph</a></li>
+
+    <li class="section"><a href="#">Architecture</a></li>
+    <li><a href="#agents">Four Agents</a></li>
+    <li><a href="#profiles">Student Profiles</a></li>
+    <li><a href="#bkt">Bayesian Tracing</a></li>
+
+    <li class="section"><a href="#">Metrics</a></li>
+    <li><a href="#nac">NAC</a></li>
+    <li><a href="#kft">KFT</a></li>
+    <li><a href="#tba">TBA</a></li>
+    <li><a href="#mrq">MRQ</a></li>
+    <li><a href="#rs">RS</a></li>
+    <li><a href="#composite">Composite</a></li>
+
+    <li class="section"><a href="#">Usage</a></li>
+    <li><a href="#running">Running Tests</a></li>
+    <li><a href="#files">File Structure</a></li>
+    <li><a href="#limits">Limitations</a></li>
+  </ul>
+</nav>
+
+<!-- ── Main content ── -->
+<main>
+
+  <h1>Socratic Tutor Evaluation Framework</h1>
+  <p class="subtitle">A quantitative, knowledge-graph-grounded framework for evaluating Socratic tutoring quality — built on the Junyi Academy dataset and Bayesian Knowledge Tracing.</p>
+
+  <!-- ── Overview ── -->
+  <h2 id="overview">Overview</h2>
+
+  <p>This framework evaluates the Socratic tutor plugin by simulating a cooperative student agent whose knowledge is grounded in a real educational dataset, running a tutoring session, and scoring the tutor's behaviour against five quantitative metrics.</p>
+
+  <div class="callout info">
+    <span class="callout-icon">💡</span>
+    <div>The evaluation is <strong>process-based</strong>: it measures the quality of the tutor's questioning relative to the student's current knowledge state, rather than measuring student learning outcomes directly. This avoids dependence on a realistic student simulation while still producing meaningful signals about tutoring quality.</div>
+  </div>
+
+  <p>The key insight motivating this design is that an effective Socratic teacher should guide <em>any</em> student in a particular direction. Success is measured by whether the teacher's questions consistently target the student's knowledge frontier — not by whether a particular student model happens to learn well.</p>
+
+  <!-- ── Dataset ── -->
+  <h2 id="dataset">Data Foundation — Junyi Academy Knowledge Graph</h2>
+
+  <p><strong>Source:</strong> Junyi Academy, a Taiwanese math e-learning platform derived from Khan Academy, providing 41 knowledge components (KCs) with prerequisite relationships derived from expert annotation.</p>
+
+  <p>The raw annotation data contained 19 bidirectional edge pairs (cycles of length 2) that were resolved by removing pedagogically backwards edges, with 2 further back-edges removed by DFS cycle detection. The resulting graph stored in <code>data/junyi_kg.json</code> is a verified DAG.</p>
+
+  <div class="card">
+    <strong style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;">Cleaned graph</strong>
+    <p style="margin-top:6px;margin-bottom:0;font-size:13.5px;">38 knowledge components &nbsp;·&nbsp; 62 directed prerequisite edges &nbsp;·&nbsp; 0 cycles</p>
+  </div>
+
+  <h3>Target Subgraph</h3>
+  <p>All evaluation sessions use the following 7-node subgraph. The three prerequisite nodes (top) are pre-mastered in all student profiles; the four target nodes are the session's learning goals.</p>
+
+  <div class="dag">
+    <div class="dag-row">
+      <div class="dag-node prereq">addition-subtraction</div>
+      <div style="width:60px"></div>
+      <div class="dag-node prereq">order-of-operations</div>
+    </div>
+    <div style="display:flex;gap:60px;margin:0 auto;">
+      <div class="dag-connector"></div>
+      <div class="dag-connector" style="height:36px;margin-left:4px;"></div>
+    </div>
+    <div class="dag-row">
+      <div class="dag-node prereq">multiplication-division</div>
+      <div style="width:60px"></div>
+      <div style="width:1px;height:0px;"></div>
+    </div>
+    <div style="display:flex;gap:0;margin:0 auto;position:relative;width:340px;height:36px;">
+      <div style="position:absolute;left:75px;top:0;width:1px;height:36px;background:var(--faint);"></div>
+      <div style="position:absolute;right:24px;top:0;width:1px;height:36px;background:var(--faint);"></div>
+    </div>
+    <div class="dag-row">
+      <div class="dag-node target">factors-multiples</div>
+      <div class="dag-arrow">──►</div>
+      <div class="dag-node target">fractions</div>
+    </div>
+    <div style="display:flex;gap:80px;margin:0 auto;">
+      <div class="dag-connector" style="margin-left:50px;"></div>
+      <div class="dag-connector" style="margin-left:20px;"></div>
+    </div>
+    <div class="dag-row">
+      <div class="dag-node leaf">rates-and-ratios</div>
+      <div style="width:30px"></div>
+      <div class="dag-node leaf">ratio-percentage</div>
+    </div>
+  </div>
+
+  <!-- ── Agents ── -->
+  <h2 id="agents">The Four Agents</h2>
+
+  <div class="agent-grid">
+    <div class="agent-card">
+      <h4><span class="agent-tag tag-existing">Existing</span> Domain Mapper</h4>
+      <p>Given source material (a topic string), produces a structured JSON knowledge graph with concept nodes, prerequisite edges, common misconceptions, checkpoint questions, and a recommended teaching sequence. Output is used by the teacher — not shared with the Student Evaluator.</p>
+    </div>
+    <div class="agent-card">
+      <h4><span class="agent-tag tag-existing">Existing</span> Socratic Teacher</h4>
+      <p>The plugin itself (<code>/socratic-tutor:socratic</code>), unchanged. Receives the domain KG and conducts the session by asking Socratic questions, never stating direct answers. Two hooks govern behaviour: <strong>UserPromptSubmit</strong> (filters adversarial messages) and <strong>Stop</strong> (checks each outbound message for answer compliance, returning <code>{"ok": true/false}</code>).</p>
+    </div>
+    <div class="agent-card">
+      <h4><span class="agent-tag tag-new">New</span> Student Agent</h4>
+      <p>Replaces the old adversarial agent. Receives a <strong>Student Knowledge Document</strong> — a prose description of its knowledge state — and a behavioural contract framing its role as accurately representing a specific knowledge profile in a scientific experiment. Appends a private self-assessment JSON after each response, flagging any knowledge leakage.</p>
+    </div>
+    <div class="agent-card">
+      <h4><span class="agent-tag tag-new">New</span> Student Evaluator</h4>
+      <p>Observes the dialogue turn-by-turn. Receives the KC graph structure (topology only — no domain mapper reasoning or checkpoint questions). Uses Bayesian Knowledge Tracing to maintain a per-KC mastery probability vector. After each student turn, classifies the response into one of six observation classes and updates BKT estimates.</p>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <span class="callout-icon">📌</span>
+    <div><strong>Separation principle:</strong> The Domain Mapper and Student Evaluator must not share reasoning. The Evaluator receives KC names and edges but not the Mapper's assessment of what mastery looks like — ensuring mastery is inferred from observed behaviour alone, not inherited from domain priors.</div>
+  </div>
+
+  <!-- ── Profiles ── -->
+  <h2 id="profiles">Student Profiles</h2>
+
+  <p>Three canonical configurations are defined in <code>students.yaml</code>, all targeting the same 4-KC subgraph. Running all three and computing the Robustness Score measures whether the teacher's quality is consistent across student types.</p>
+
+  <div class="profile-grid">
+    <div class="profile-card">
+      <h4>tabula_rasa</h4>
+      <p>Prerequisites mastered, all 4 target KCs absent, no misconceptions. Tests whether the tutor sequences questions correctly from scratch.</p>
+      <br>
+      <span class="pill" style="background:var(--green-dim);color:#86efac;">0 misconceptions</span>
+      <span class="pill" style="background:var(--surface2);color:var(--muted);">Haiku</span>
+    </div>
+    <div class="profile-card">
+      <h4>partial_knowledge</h4>
+      <p>factors-multiples mastered, fractions partial, rates/ratios absent. One planted misconception: adding fractions by adding numerators and denominators separately.</p>
+      <br>
+      <span class="pill" style="background:var(--amber-dim);color:#fde68a;">1 misconception</span>
+      <span class="pill" style="background:var(--surface2);color:var(--muted);">Haiku</span>
+    </div>
+    <div class="profile-card">
+      <h4>misconception_heavy</h4>
+      <p>All 4 target KCs absent. Three load-bearing misconceptions: factors/multiples confusion, fraction addition rule, percentages bounded at 100.</p>
+      <br>
+      <span class="pill" style="background:var(--red-dim);color:#fca5a5;">3 misconceptions</span>
+      <span class="pill" style="background:var(--purple-dim);color:var(--purple);">Sonnet</span>
+    </div>
+  </div>
+
+  <!-- ── BKT ── -->
+  <h2 id="bkt">Bayesian Knowledge Tracing</h2>
+
+  <p>BKT models the probability that each KC is mastered, updated after each student turn using the standard 4-parameter model (Corbett &amp; Anderson, 1994).</p>
+
+  <h3>Parameters</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Parameter</th><th>Value</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>P(L₀)</code> absent</td>  <td>0.10</td><td>Prior mastery probability for unstudied KCs</td></tr>
+        <tr><td><code>P(L₀)</code> partial</td> <td>0.50</td><td>Prior for partially understood KCs</td></tr>
+        <tr><td><code>P(L₀)</code> mastered</td><td>0.90</td><td>Prior for pre-mastered KCs</td></tr>
+        <tr><td><code>P(T)</code></td>           <td>0.10</td><td>Learning transition probability per opportunity</td></tr>
+        <tr><td><code>P(G)</code></td>           <td>0.25</td><td>Guess rate — correct response despite no mastery</td></tr>
+        <tr><td><code>P(S)</code></td>           <td>0.10</td><td>Slip rate — incorrect response despite mastery</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Observation Classes</h3>
+  <div class="obs-list">
+    <div class="obs-row">
+      <span class="obs-chip" style="background:var(--green-dim);color:#86efac;">strong_articulation</span>
+      <span class="obs-desc">Student explains the KC correctly and unprompted — strongest evidence of mastery</span>
+    </div>
+    <div class="obs-row">
+      <span class="obs-chip" style="background:#713f12;color:#fde68a;">weak_articulation</span>
+      <span class="obs-desc">Correct but minimal or fragmented response — moderate evidence</span>
+    </div>
+    <div class="obs-row">
+      <span class="obs-chip" style="background:#7c2d12;color:#fdba74;">guided_recognition</span>
+      <span class="obs-desc">Correct only after visible scaffolding in the teacher's question — weak evidence</span>
+    </div>
+    <div class="obs-row">
+      <span class="obs-chip" style="background:var(--red-dim);color:#fca5a5;">misconception</span>
+      <span class="obs-desc">Student states a demonstrably wrong belief — negative evidence</span>
+    </div>
+    <div class="obs-row">
+      <span class="obs-chip" style="background:var(--surface2);color:var(--muted);">absent</span>
+      <span class="obs-desc">KC not engaged this turn — no update (tiny drift only)</span>
+    </div>
+    <div class="obs-row">
+      <span class="obs-chip" style="background:var(--purple-dim);color:var(--purple);">contradiction</span>
+      <span class="obs-desc">Student contradicts a prior response on the same KC — destabilises estimate</span>
+    </div>
+  </div>
+
+  <h3>Knowledge Frontier</h3>
+  <p>The knowledge frontier is the set of target KCs whose direct prerequisites are all mastered (<code>p &gt; 0.70</code>) but which are not yet firmly mastered themselves (<code>p &lt; 0.70</code>). This is the ideal target zone for the tutor's questions at any given turn.</p>
+
+  <!-- ── Metrics ── -->
+  <h2 id="nac">NAC — Non-Answer Compliance Rate</h2>
+
+  <div class="metric-card">
+    <div class="metric-header">
+      <span class="metric-abbr">NAC</span>
+      <span class="metric-name">Non-Answer Compliance Rate</span>
+    </div>
+    <div class="metric-formula">NAC = turns where Stop hook returned ok:true / total tutor turns with a recorded verdict</div>
+    <p>Captured from the Stop hook's <code>{"ok": true/false}</code> output logged from stderr during the session. Falls back to a heuristic (trailing <code>?</code> in the last 100 characters) when the hook verdict is absent in older log formats.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Range</th><th>Interpretation</th></tr></thead>
+      <tbody>
+        <tr><td><code>≥ 0.97</code></td><td>Excellent — at most 1 violation per 30-turn session</td></tr>
+        <tr><td><code>0.90 – 0.97</code></td><td>Acceptable</td></tr>
+        <tr><td><code>&lt; 0.90</code></td><td>Failing — systematic answer leakage</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="kft">KFT — Knowledge Frontier Targeting Score</h2>
+
+  <div class="metric-card">
+    <div class="metric-header">
+      <span class="metric-abbr">KFT</span>
+      <span class="metric-name">Knowledge Frontier Targeting Score</span>
+    </div>
+    <div class="metric-formula">KFT = mean of per-turn scores across all teacher turns</div>
+    <p>For each teacher question turn, an LLM classifies which KC the question targets and compares it to the Student Evaluator's frontier at that moment. A high KFT means the teacher consistently targets the student's current learning boundary rather than drilling already-mastered concepts or jumping ahead of prerequisites.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Situation</th><th>Turn score</th></tr></thead>
+      <tbody>
+        <tr><td>Targeted KC is on the frontier</td><td><strong>1.0</strong></td></tr>
+        <tr><td>Targeted KC already mastered (<code>p &gt; 0.70</code>)</td><td>0.3</td></tr>
+        <tr><td>Targeted KC's prerequisites not yet met</td><td>0.0</td></tr>
+        <tr><td>Off-map (tangent, logged by tangent-explorer)</td><td>0.5</td></tr>
+        <tr><td>Off-map (no tangent logged)</td><td>0.0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="tba">TBA — Teacher Belief Accuracy</h2>
+
+  <div class="metric-card">
+    <div class="metric-header">
+      <span class="metric-abbr">TBA</span>
+      <span class="metric-name">Teacher Belief Accuracy</span>
+    </div>
+    <div class="metric-formula">TBA = 1 − mean(|teacher_phase − evaluator_phase| / 8)  across all turns</div>
+    <p>Measures how well the teacher's internal model of the student (from <code>.socratic-session.json</code>) aligns with the Student Evaluator's independent mastery estimate. <code>teacher_phase</code> is the session log's <code>current_phase</code> field (1–8); <code>evaluator_phase</code> is derived from the highest-indexed target KC with <code>p &gt; 0.70</code> in the BKT state. A low TBA often explains poor KFT — the teacher is targeting the wrong region because its student model is miscalibrated.</p>
+  </div>
+
+  <h2 id="mrq">MRQ — Misconception Response Quality</h2>
+
+  <div class="metric-card">
+    <div class="metric-header">
+      <span class="metric-abbr">MRQ</span>
+      <span class="metric-name">Misconception Response Quality</span>
+    </div>
+    <div class="metric-formula">MRQ = targeted_probe_turns / total_misconception_turns</div>
+    <p>For turns where the Student Agent's self-assessment flags <code>misconception_activated: true</code>, checks whether the teacher's next 1–3 turns target the KC associated with that misconception (via LLM classification). Returns <code>None</code> if no misconceptions were activated during the session (e.g. <code>tabula_rasa</code> profile) — the composite weight is redistributed to NAC and KFT proportionally in that case.</p>
+  </div>
+
+  <div class="callout warn">
+    <span class="callout-icon">⚠️</span>
+    <div>MRQ allows a <strong>6-turn response window</strong>. The accuracy-reviewer subagent runs every 6 turns, so a misconception expressed on turn 3 may not be addressed until turns 7–9. Same-turn reaction is not required.</div>
+  </div>
+
+  <h2 id="rs">RS — Robustness Score</h2>
+
+  <div class="metric-card">
+    <div class="metric-header">
+      <span class="metric-abbr">RS</span>
+      <span class="metric-name">Robustness Score</span>
+    </div>
+    <div class="metric-formula">RS = 0.6 × (1 − CV_KFT) + 0.4 × (1 − CV_NAC)
+where CV = std / mean across student configurations</div>
+    <p>A meta-metric computed across multiple runs of the same topic with different student profiles. A high RS means the teacher's guidance quality is consistent regardless of which student configuration it faces — evidence the behaviour is genuinely adaptive rather than accidentally aligned with one student type.</p>
+  </div>
+
+  <!-- ── Composite ── -->
+  <h2 id="composite">Composite Score</h2>
+
+  <div class="composite-row">
+    <div class="comp-block nac"><div class="weight">0.30</div><div class="label">NAC</div></div>
+    <div class="comp-op">+</div>
+    <div class="comp-block kft"><div class="weight">0.30</div><div class="label">KFT</div></div>
+    <div class="comp-op">+</div>
+    <div class="comp-block tba"><div class="weight">0.15</div><div class="label">TBA</div></div>
+    <div class="comp-op">+</div>
+    <div class="comp-block mrq"><div class="weight">0.15</div><div class="label">MRQ</div></div>
+    <div class="comp-op">+</div>
+    <div class="comp-block rs"><div class="weight">0.10</div><div class="label">RS</div></div>
+  </div>
+
+  <p>NAC and KFT carry equal and highest weight as the two core behaviours: not giving answers, and targeting the right concepts. TBA and MRQ are secondary signals. RS is a meta-metric given lower individual-run weight since it requires multiple sessions to compute.</p>
+
+  <!-- ── Running ── -->
+  <h2 id="running">Running Tests</h2>
+
+  <div class="callout warn">
+    <span class="callout-icon">⚠️</span>
+    <div>The orchestrator calls <code>claude -p</code> internally. Run it from a <strong>plain terminal</strong>, not from inside a Claude Code session — nested sessions are blocked.</div>
+  </div>
+
+  <h3>Single session</h3>
+  <pre>cd /path/to/test
+python3 orchestrator.py \
+  --mode student \
+  --student-config tabula_rasa \
+  --turns 8 \
+  --topic "factors and fractions"</pre>
+
+  <h3>Score a completed run</h3>
+  <pre>python3 scorer.py runs/&lt;timestamp&gt;_student_tabula_rasa.jsonl --metrics --turns</pre>
+
+  <h3>Robustness score across all three profiles</h3>
+  <pre>python3 scorer.py --compare \
+  runs/&lt;ts&gt;_student_tabula_rasa.jsonl \
+  runs/&lt;ts&gt;_student_partial_knowledge.jsonl \
+  runs/&lt;ts&gt;_student_misconception_heavy.jsonl</pre>
+
+  <h3>Visualise a session</h3>
+  <p>Open <code>visualize.html</code> in a browser. The current file is hardcoded to the <code>tabula_rasa</code> run from 2026-02-25. Use the slider to step through turns; hover observation badges for evidence quotes.</p>
+
+  <!-- ── Files ── -->
+  <h2 id="files">File Structure</h2>
+
+  <div class="file-tree">
+    <span class="dir">test/</span><br>
+    ├── <span class="file">orchestrator.py</span>       <span class="desc">— Main harness; --mode student|fixed|adaptive</span><br>
+    ├── <span class="file">scorer.py</span>              <span class="desc">— Post-run scorer; --metrics, --compare flags</span><br>
+    ├── <span class="file">student_agent.py</span>       <span class="desc">— Knowledge document builder + student message generator</span><br>
+    ├── <span class="file">student_evaluator.py</span>   <span class="desc">— BKT state tracker, observation classifier, frontier computation</span><br>
+    ├── <span class="file">students.yaml</span>          <span class="desc">— Student profile configurations (tabula_rasa, partial_knowledge, misconception_heavy)</span><br>
+    ├── <span class="file">visualize.html</span>         <span class="desc">— Interactive knowledge graph visualisation</span><br>
+    ├── <span class="file">summary.html</span>           <span class="desc">— This document</span><br>
+    ├── <span class="dir">data/</span><br>
+    │   └── <span class="file">junyi_kg.json</span>      <span class="desc">— Cleaned Junyi KC graph (38 nodes, 62 edges)</span><br>
+    └── <span class="dir">runs/</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;└── <span class="file">*.jsonl</span>            <span class="desc">— Per-turn session logs (student_message, tutor_response, evaluator_snapshot, …)</span>
+  </div>
+
+  <!-- ── Limitations ── -->
+  <h2 id="limits">Known Limitations</h2>
+
+  <ol class="limits">
+    <li><strong>Student simulation validity.</strong> The student agent represents a knowledge state accurately but does not perfectly model human confusion. Weaker models (Haiku) exhibit genuine knowledge limits; stronger models may reason too fluently on topics outside their Knowledge Document.</li>
+    <li><strong>Stop hook verdict capture.</strong> The hook verdict is parsed from stderr via regex. If the CLI output format changes, <code>stop_hook_verdict</code> will silently fall back to <code>null</code> and NAC will revert to the trailing-question-mark heuristic.</li>
+    <li><strong>KFT and MRQ require LLM calls per turn.</strong> Both metrics are computed post-hoc by <code>scorer.py --metrics</code> and each involves a separate Claude CLI invocation, making scoring slow for long sessions.</li>
+    <li><strong>Visualisation is static.</strong> <code>visualize.html</code> contains hardcoded data from a single run. A future improvement would be a script that auto-generates it from any <code>.jsonl</code> run file.</li>
+    <li><strong>Scope limited to Junyi's math KCs.</strong> The framework evaluates tutoring only on topics covered by the Junyi prerequisite graph. CS or other domains require a supplementary dataset or a synthetic KC graph generated by the domain mapper.</li>
+  </ol>
+
+</main>
+</div>
+</body>
+</html>
