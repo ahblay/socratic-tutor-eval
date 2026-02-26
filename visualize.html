@@ -16,6 +16,14 @@
               letter-spacing: .08em; }
   .turn-badge { background: #3b82f6; color: #fff; font-size: 13px; font-weight: 700;
                 padding: 2px 10px; border-radius: 99px; }
+  .file-label { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .file-btn { background: #334155; border: 1px solid #475569; color: #94a3b8;
+              border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 12px;
+              white-space: nowrap; }
+  .file-btn:hover { background: #475569; color: #e2e8f0; }
+  #file-name { font-size: 11px; color: #64748b; max-width: 220px; overflow: hidden;
+               text-overflow: ellipsis; white-space: nowrap; }
+  input[type=file] { display: none; }
 
   /* ── main layout ── */
   .main { display: flex; flex: 1; overflow: hidden; }
@@ -76,14 +84,29 @@
   /* ── SVG node animations ── */
   @keyframes pulse { 0%,100%{stroke-opacity:.9;stroke-width:3} 50%{stroke-opacity:.4;stroke-width:5} }
   .frontier-ring { animation: pulse 1.6s ease-in-out infinite; }
+
+  /* ── no-data overlay ── */
+  #no-data { position: absolute; inset: 0; display: flex; flex-direction: column;
+             align-items: center; justify-content: center; gap: 16px;
+             background: #0f172a; z-index: 10; }
+  #no-data h2 { font-size: 16px; color: #94a3b8; font-weight: 500; }
+  #no-data p  { font-size: 13px; color: #475569; }
+  #no-data .nd-btn { background: #3b82f6; color: #fff; border: none; border-radius: 8px;
+                     padding: 8px 20px; font-size: 14px; cursor: pointer; }
+  #no-data .nd-btn:hover { background: #2563eb; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Socratic Tutor · Knowledge Graph Evolution</h1>
-  <span class="turn-badge" id="hdr-turn">Initial state</span>
-  <span style="margin-left:auto;font-size:12px;color:#64748b;" id="hdr-frontier"></span>
+  <span class="turn-badge" id="hdr-turn">—</span>
+  <span style="font-size:12px;color:#64748b;" id="hdr-frontier"></span>
+  <div class="file-label">
+    <span id="file-name">No file loaded</span>
+    <label class="file-btn" for="file-input">Load run file…</label>
+    <input type="file" id="file-input" accept=".jsonl">
+  </div>
 </header>
 
 <div class="main">
@@ -97,7 +120,7 @@
   <!-- ── Side panel ── -->
   <div class="side">
     <div class="dialogue" id="dialogue">
-      <div class="empty-state">← Move the slider to step through the session</div>
+      <div class="empty-state">Load a run file to begin</div>
     </div>
 
     <div class="obs-section">
@@ -117,22 +140,25 @@
   <span class="tl-label">Turn</span>
   <button class="tl-btn" id="btn-prev">&#8592;</button>
   <div style="flex:1;display:flex;flex-direction:column;gap:3px;">
-    <input type="range" id="slider" min="0" max="8" value="0" step="1">
+    <input type="range" id="slider" min="0" max="0" value="0" step="1">
     <div class="tl-ticks" id="tl-ticks"></div>
   </div>
   <button class="tl-btn" id="btn-next">&#8594;</button>
 </div>
 
+<!-- ── No-data overlay ── -->
+<div id="no-data">
+  <h2>Socratic Tutor · Knowledge Graph Viewer</h2>
+  <p>Select a <code>.jsonl</code> run file from the <code>runs/</code> directory</p>
+  <button class="nd-btn" onclick="document.getElementById('file-input').click()">
+    Load run file…
+  </button>
+</div>
+
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
-// DATA
+// HARDCODED TOPOLOGY  (Junyi Academy subgraph)
 // ─────────────────────────────────────────────────────────────────────────────
-
-const TARGET_KCS = ['factors-multiples','fractions','rates-and-ratios','ratio-percentage'];
-const ALL_DISPLAY = [
-  'addition-subtraction','order-of-operations','multiplication-division',
-  'factors-multiples','fractions','rates-and-ratios','ratio-percentage'
-];
 
 const KC_LABELS = {
   'addition-subtraction':    'Addition &\nSubtraction',
@@ -144,7 +170,8 @@ const KC_LABELS = {
   'ratio-percentage':        'Ratio &\nPercentage',
 };
 
-// Graph topology (x, y positions in the 560×560 viewBox)
+// prereq: true  → displayed as a prerequisite (mastered at session start)
+// prereq: false → target KC (what the tutor is teaching)
 const NODES = {
   'addition-subtraction':    { x: 130, y: 75,  r: 34, prereq: true  },
   'order-of-operations':     { x: 430, y: 75,  r: 34, prereq: true  },
@@ -164,141 +191,26 @@ const EDGES = [
   ['fractions',               'ratio-percentage'],
 ];
 
-// Turn-by-turn data extracted from the run log
-const TURNS = [
-  {
-    turn: 0, label: 'Initial',
-    bkt: {
-      'addition-subtraction': 0.9, 'order-of-operations': 0.9, 'multiplication-division': 0.9,
-      'factors-multiples': 0.10, 'fractions': 0.10, 'rates-and-ratios': 0.10, 'ratio-percentage': 0.10
-    },
-    frontier: ['factors-multiples'],
-    student: null, tutor: null, observations: []
-  },
-  {
-    turn: 1, label: 'Turn 1',
-    bkt: {
-      'addition-subtraction': 0.878, 'order-of-operations': 0.878, 'multiplication-division': 0.878,
-      'factors-multiples': 0.113, 'fractions': 0.296, 'rates-and-ratios': 0.109, 'ratio-percentage': 0.109
-    },
-    frontier: ['factors-multiples'],
-    student: "I haven't really studied factors and fractions yet, so I'm pretty much starting from scratch here! I mean, I've heard the word \"factor\" before — like, people talk about something being \"a major factor.\" So I'm guessing a factor is like... something that contributes to something else? I think a fraction is like a part of something?",
-    tutor: "Good — that everyday sense of \"factor\" is actually a useful starting point. You mentioned a factor is \"something that goes into making something.\" In math, we use a very specific version of that idea. Let's start with a concrete number: what multiplications can you think of that give you the answer 12?",
-    observations: [
-      { kc: 'factors-multiples', cls: 'misconception',      quote: '"something that contributes to something else"' },
-      { kc: 'fractions',         cls: 'weak_articulation',  quote: '"a part of something"' },
-      { kc: 'multiplication-division', cls: 'weak_articulation', quote: '"comfortable with multiplication, division"' },
-    ]
-  },
-  {
-    turn: 2, label: 'Turn 2',
-    bkt: {
-      'addition-subtraction': 0.879, 'order-of-operations': 0.879, 'multiplication-division': 0.966,
-      'factors-multiples': 0.316, 'fractions': 0.303, 'rates-and-ratios': 0.118, 'ratio-percentage': 0.118
-    },
-    frontier: ['factors-multiples'],
-    student: "Good question! Let me think through this... So I need to find multiplications that equal 12. Well: 1×12=12, 2×6=12, 3×4=12. And I guess you could also flip them around. So the distinct pairs are: 1 and 12, 2 and 6, and 3 and 4. Are these the factors?",
-    tutor: "You noticed something important — the pairs are the same just flipped. So let's pull out the individual numbers from those pairs. What is the complete list of individual numbers you'd extract from those three pairs?",
-    observations: [
-      { kc: 'factors-multiples',       cls: 'weak_articulation',   quote: '"Are these the factors?"' },
-      { kc: 'multiplication-division', cls: 'strong_articulation', quote: '1×12=12, 2×6=12, 3×4=12 — all correct' },
-    ]
-  },
-  {
-    turn: 3, label: 'Turn 3',
-    bkt: {
-      'addition-subtraction': 0.880, 'order-of-operations': 0.880, 'multiplication-division': 0.967,
-      'factors-multiples': 0.535, 'fractions': 0.310, 'rates-and-ratios': 0.127, 'ratio-percentage': 0.127
-    },
-    frontier: ['factors-multiples'],
-    student: "Okay, so if I pull out all the individual numbers from those pairs: From (1,12): 1 and 12. From (2,6): 2 and 6. From (3,4): 3 and 4. So the complete list would be: 1, 2, 3, 4, 6, and 12. And every single one is a number that, when multiplied by another on the list, gives 12. Are these the factors?",
-    tutor: "You've got the list. Now try this: what happens when you divide 12 by any of those numbers?",
-    observations: [
-      { kc: 'factors-multiples', cls: 'weak_articulation', quote: '"every one multiplied by another gives 12"' },
-    ]
-  },
-  {
-    turn: 4, label: 'Turn 4',
-    bkt: {
-      'addition-subtraction': 0.881, 'order-of-operations': 0.881, 'multiplication-division': 0.992,
-      'factors-multiples': 0.674, 'fractions': 0.317, 'rates-and-ratios': 0.136, 'ratio-percentage': 0.136
-    },
-    frontier: ['factors-multiples'],
-    student: "Okay, let me try dividing 12 by each of those numbers: 12÷1=12, 12÷2=6, 12÷3=4, 12÷4=3, 12÷6=2, 12÷12=1. Oh wow, that's interesting! Every single division comes out to a whole number with no remainder. Is that what makes them factors? Like, factors are the numbers that divide evenly into another number?",
-    tutor: "You've arrived somewhere interesting — hold onto that idea. Now here's a question: how would you know if you had missed a factor? Could you have left one out without realizing it?",
-    observations: [
-      { kc: 'factors-multiples',       cls: 'weak_articulation',   quote: '"factors divide evenly, no remainder?"' },
-      { kc: 'multiplication-division', cls: 'strong_articulation', quote: 'All 6 divisions computed correctly' },
-    ]
-  },
-  {
-    turn: 5, label: 'Turn 5',
-    bkt: {
-      'addition-subtraction': 0.882, 'order-of-operations': 0.882, 'multiplication-division': 0.998,
-      'factors-multiples': 0.893, 'fractions': 0.324, 'rates-and-ratios': 0.144, 'ratio-percentage': 0.144
-    },
-    frontier: ['fractions'],
-    student: "That's a really good question — it makes me think I should check more carefully. So I found 1, 2, 3, 4, 6, and 12. But what about numbers I didn't test? Like 5, or 7? Let me check: 12÷5=2.4 (decimal), 12÷7 doesn't work neatly either. And any number bigger than 12 would give something less than 1. So I think I actually did find them all.",
-    tutor: "You just described checking every number from 1 to 12 as one verification strategy. But you also noticed something earlier that gives you a shortcut — you said the pairs are \"the same ones, just flipped.\" What does that tell you about how far you really need to check?",
-    observations: [
-      { kc: 'factors-multiples',       cls: 'strong_articulation', quote: 'Systematic verification + boundary reasoning' },
-      { kc: 'multiplication-division', cls: 'strong_articulation', quote: '12÷5=2.4, correctly identified as non-factor' },
-    ]
-  },
-  {
-    turn: 6, label: 'Turn 6',
-    bkt: {
-      'addition-subtraction': 0.884, 'order-of-operations': 0.884, 'multiplication-division': 0.996,
-      'factors-multiples': 0.971, 'fractions': 0.331, 'rates-and-ratios': 0.153, 'ratio-percentage': 0.153
-    },
-    frontier: ['fractions'],
-    student: "Ohh, that's a really clever observation! So looking at my pairs: 1×12 (1 much smaller than 12), 2×6, 3×4 (almost equal). When I check 4, I'd just get the pair 4×3 again — backwards. So I should stop checking once one factor is ≥ the other. I really only needed to check up to about √12!",
-    tutor: "You've nailed the logic there — check that for yourself with a different number when you get a chance. Let's pivot. You started by saying a fraction is \"a part of something.\" You've been working with 12 equal pieces. If you have 3 of those pieces, how would you write that mathematically?",
-    observations: [
-      { kc: 'factors-multiples', cls: 'strong_articulation', quote: 'Discovered √n bound for factor checking' },
-    ]
-  },
-  {
-    turn: 7, label: 'Turn 7',
-    bkt: {
-      'addition-subtraction': 0.885, 'order-of-operations': 0.885, 'multiplication-division': 0.993,
-      'factors-multiples': 0.971, 'fractions': 0.676, 'rates-and-ratios': 0.161, 'ratio-percentage': 0.161
-    },
-    frontier: ['fractions'],
-    student: "Hmm, okay, so I have 12 equal pieces total, and I'm taking 3 of them. So... 3 out of 12, right? That's what I have compared to the whole thing. I'm thinking about how to write that mathematically. I've seen notation like one number on top and one number on the bottom with a line between them. So would it be written as 3/12? Where the 3 is the pieces I have and the 12 is the total? And would I call that a fraction?",
-    tutor: "You've written it down — 3 on top, 12 on the bottom. Now look at those two numbers. Are they playing the same role in that fraction, or different roles?",
-    observations: [
-      { kc: 'fractions',               cls: 'strong_articulation', quote: '"3/12 — 3 pieces I have, 12 the total"' },
-      { kc: 'multiplication-division', cls: 'weak_articulation',   quote: '"I know division well"' },
-    ]
-  },
-  {
-    turn: 8, label: 'Turn 8',
-    bkt: {
-      'addition-subtraction': 0.886, 'order-of-operations': 0.886, 'multiplication-division': 0.993,
-      'factors-multiples': 0.972, 'fractions': 0.894, 'rates-and-ratios': 0.170, 'ratio-percentage': 0.170
-    },
-    frontier: ['ratio-percentage'],
-    student: "Oh, definitely different roles! The 3 is the number of pieces I actually have — it's the part I'm talking about. But the 12 is the total number of pieces that make up the whole thing. So the 3 on top must be the part, and the 12 on the bottom must be the whole. And I guess that's why people write it this way — to show which number is which role. The top one shows what you have, the bottom one shows the total?",
-    tutor: "Good — they're playing different roles. Now push on the 12 a little more. You said it represents \"the total pieces.\" But if I had the same whole divided into 6 pieces instead of 12 — would each piece be the same size?",
-    observations: [
-      { kc: 'fractions', cls: 'strong_articulation', quote: '"top = part, bottom = whole — that\'s why it\'s written this way"' },
-    ]
-  },
-];
+const TARGET_KCS  = Object.keys(NODES).filter(k => !NODES[k].prereq);
+const DISPLAY_KCS = Object.keys(NODES);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DYNAMIC STATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+let TURNS = [];   // populated by loadFile()
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLOUR HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 function masteryColor(p) {
-  // 0.10 → cool gray; 0.5 → amber; 0.9+ → green
-  if (p <= 0.15) return '#334155';      // dark slate (absent)
+  if (p <= 0.15) return '#334155';
   const stops = [
-    [0.15, [51,  65, 85]],    // slate
-    [0.40, [146,109,  5]],    // dark amber
-    [0.70, [101,163, 13]],    // lime
-    [1.00, [ 34,197, 94]],    // emerald
+    [0.15, [51,  65, 85]],
+    [0.40, [146,109,  5]],
+    [0.70, [101,163, 13]],
+    [1.00, [ 34,197, 94]],
   ];
   for (let i = 1; i < stops.length; i++) {
     const [t1, c1] = stops[i-1];
@@ -324,7 +236,7 @@ const OBS_META = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SVG GRAPH
+// SVG GRAPH  (built once; colours updated on each render)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const svg = document.getElementById('kg');
@@ -337,7 +249,6 @@ function el(tag, attrs, children) {
   return e;
 }
 
-// Arrow marker
 const defs = el('defs');
 const marker = el('marker', { id:'arrow', markerWidth:'8', markerHeight:'8',
   refX:'6', refY:'3', orient:'auto' });
@@ -345,11 +256,8 @@ marker.appendChild(el('path', { d:'M0,0 L0,6 L8,3 z', fill:'#475569' }));
 defs.appendChild(marker);
 svg.appendChild(defs);
 
-// Edge layer
 const edgeLayer = el('g', { id: 'edges' });
 svg.appendChild(edgeLayer);
-
-// Draw edges
 for (const [from, to] of EDGES) {
   const n1 = NODES[from], n2 = NODES[to];
   const dx = n2.x - n1.x, dy = n2.y - n1.y;
@@ -363,31 +271,24 @@ for (const [from, to] of EDGES) {
   }));
 }
 
-// Node layer
 const nodeLayer = el('g', { id: 'nodes' });
 svg.appendChild(nodeLayer);
 
-const nodeEls = {};  // id → { circle, ring, text }
+const nodeEls = {};
 
 for (const [id, n] of Object.entries(NODES)) {
   const g = el('g', { transform: `translate(${n.x},${n.y})` });
-
-  // Frontier pulse ring (hidden by default)
   const ring = el('circle', {
     r: n.r + 7, fill: 'none',
     stroke: '#f59e0b', 'stroke-width': '3',
     opacity: '0', class: 'frontier-ring',
   });
-
-  // Main circle
   const circle = el('circle', {
     r: n.r, fill: '#1e293b',
     stroke: n.prereq ? '#475569' : '#64748b',
     'stroke-width': n.prereq ? '1.5' : '2',
     style: 'transition: fill .5s ease, stroke .5s ease',
   });
-
-  // Label — split on \n
   const lines = (KC_LABELS[id]||id).split('\n');
   const textG = el('g');
   const dy = lines.length > 1 ? -7 : 0;
@@ -401,7 +302,6 @@ for (const [id, n] of Object.entries(NODES)) {
       'pointer-events': 'none',
     }, [document.createTextNode(line)]));
   });
-
   g.appendChild(ring);
   g.appendChild(circle);
   g.appendChild(textG);
@@ -410,38 +310,134 @@ for (const [id, n] of Object.entries(NODES)) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MASTERY BARS
+// MASTERY BARS  (rebuilt whenever a new file is loaded)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const barsEl = document.getElementById('bars');
-const barFills = {};
+const barsEl   = document.getElementById('bars');
+let   barFills = {};
 
-for (const kc of TARGET_KCS) {
-  const label = (KC_LABELS[kc]||kc).replace('\n',' ');
-  const row = document.createElement('div');
-  row.className = 'bar-row';
-  row.innerHTML = `
-    <span class="bar-label">${label}</span>
-    <div class="bar-track"><div class="bar-fill" id="bar-${kc}" style="width:0%;background:#334155"></div></div>
-    <span class="bar-val" id="barval-${kc}">0.10</span>
-  `;
-  barsEl.appendChild(row);
-  barFills[kc] = {
-    fill: document.getElementById(`bar-${kc}`),
-    val:  document.getElementById(`barval-${kc}`),
-  };
+function buildBars() {
+  barsEl.innerHTML = '';
+  barFills = {};
+  for (const kc of TARGET_KCS) {
+    const label = (KC_LABELS[kc]||kc).replace('\n',' ');
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML = `
+      <span class="bar-label">${label}</span>
+      <div class="bar-track"><div class="bar-fill" id="bar-${kc}" style="width:0%;background:#334155"></div></div>
+      <span class="bar-val" id="barval-${kc}">—</span>
+    `;
+    barsEl.appendChild(row);
+    barFills[kc] = {
+      fill: document.getElementById(`bar-${kc}`),
+      val:  document.getElementById(`barval-${kc}`),
+    };
+  }
 }
+buildBars();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JSONL LOADER
+// ─────────────────────────────────────────────────────────────────────────────
+
+function computeInitialFrontier(bkt) {
+  // Build prerequisite map from hardcoded EDGES
+  const prereqMap = {};
+  for (const [from, to] of EDGES) {
+    if (!prereqMap[to]) prereqMap[to] = [];
+    prereqMap[to].push(from);
+  }
+  return TARGET_KCS.filter(kc => {
+    if ((bkt[kc] ?? 0.1) >= 0.7) return false;  // already mastered
+    const prereqs = prereqMap[kc] || [];
+    return prereqs.every(p => (bkt[p] ?? 0.1) > 0.7);
+  });
+}
+
+function buildTurns(entries) {
+  if (!entries.length) return;
+
+  // Derive initial BKT from first turn's data.
+  // For KCs with no observation in turn 1, first-turn value ≈ initial value
+  // (absent drift is < 0.002 per turn).
+  // For KCs with observations, reverse-engineer: >= 0.8 → was mastered (0.9),
+  // >= 0.4 → was partial (0.5), else → was absent (0.1).
+  const firstSnap = entries[0].evaluator_snapshot?.updated_bkt || {};
+  const firstObsKCs = new Set(
+    (entries[0].evaluator_snapshot?.observations || []).map(o => o.kc_id)
+  );
+
+  const initialBkt = {};
+  for (const kc of DISPLAY_KCS) {
+    const v = firstSnap[kc] ?? 0.1;
+    initialBkt[kc] = v >= 0.8 ? 0.9 : v >= 0.4 ? 0.5 : 0.1;
+  }
+
+  TURNS = [
+    {
+      turn: 0, label: 'Initial',
+      bkt: initialBkt,
+      frontier: computeInitialFrontier(initialBkt),
+      student: null, tutor: null, observations: [],
+    },
+    ...entries.map(e => {
+      const snap = e.evaluator_snapshot || {};
+      const bkt  = {};
+      for (const kc of DISPLAY_KCS) {
+        bkt[kc] = snap.updated_bkt?.[kc] ?? 0.1;
+      }
+      const observations = (snap.observations || [])
+        .filter(o => NODES[o.kc_id])          // only KCs we display
+        .map(o => ({
+          kc:    o.kc_id,
+          cls:   o.observation_class,
+          quote: o.evidence_quote || '',
+        }));
+      return {
+        turn: e.turn,
+        label: `Turn ${e.turn}`,
+        bkt,
+        frontier: (snap.knowledge_frontier || []).filter(k => NODES[k]),
+        student:  e.student_message  || null,
+        tutor:    e.tutor_response   || null,
+        observations,
+      };
+    }),
+  ];
+}
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try {
+      const lines   = evt.target.result.trim().split('\n').filter(Boolean);
+      const entries = lines.map(l => JSON.parse(l));
+      buildTurns(entries);
+      initUI(file.name);
+    } catch (err) {
+      alert('Could not parse file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RENDER
 // ─────────────────────────────────────────────────────────────────────────────
 
 function render(turnIdx) {
-  const data = TURNS[turnIdx];
+  if (!TURNS.length) return;
+  const data   = TURNS[turnIdx];
+  const nTurns = TURNS.length - 1;  // excludes initial state
 
   // Header
   document.getElementById('hdr-turn').textContent =
-    turnIdx === 0 ? 'Initial state' : `Turn ${data.turn} / 8`;
+    turnIdx === 0 ? 'Initial state' : `Turn ${data.turn} / ${nTurns}`;
   document.getElementById('hdr-frontier').textContent =
     data.frontier.length
       ? 'Frontier: ' + data.frontier.map(k => (KC_LABELS[k]||k).replace('\n',' ')).join(', ')
@@ -452,23 +448,25 @@ function render(turnIdx) {
     const p = data.bkt[id] ?? 0.1;
     els.circle.style.fill   = masteryColor(p);
     els.circle.style.stroke = NODES[id].prereq ? '#475569' : '#94a3b8';
-    const onFrontier = data.frontier.includes(id);
-    els.ring.setAttribute('opacity', onFrontier ? '1' : '0');
+    els.ring.setAttribute('opacity', data.frontier.includes(id) ? '1' : '0');
   }
 
   // Mastery bars
   for (const kc of TARGET_KCS) {
-    const p = data.bkt[kc] ?? 0.1;
+    const bf = barFills[kc];
+    if (!bf) continue;
+    const p   = data.bkt[kc] ?? 0.1;
     const pct = Math.round(p * 100);
-    barFills[kc].fill.style.width      = pct + '%';
-    barFills[kc].fill.style.background = masteryColor(p);
-    barFills[kc].val.textContent       = p.toFixed(2);
+    bf.fill.style.width      = pct + '%';
+    bf.fill.style.background = masteryColor(p);
+    bf.val.textContent       = p.toFixed(2);
   }
 
   // Dialogue
   const dlg = document.getElementById('dialogue');
-  if (!data.tutor) {
-    dlg.innerHTML = '<div class="empty-state">← Session not yet started<br><small>Advance the slider to begin</small></div>';
+  if (!data.tutor && !data.student) {
+    dlg.innerHTML = `<div class="empty-state">← Session not yet started<br>
+      <small>Advance the slider to begin</small></div>`;
   } else {
     dlg.innerHTML = `
       <div class="bubble student">
@@ -494,9 +492,8 @@ function render(turnIdx) {
       chip.className = 'obs-chip';
       chip.style.background = meta.bg;
       chip.style.color       = meta.fg;
-      const kcLabel = (KC_LABELS[obs.kc]||obs.kc).replace('\n',' ');
       chip.title = obs.quote;
-      chip.textContent = `${kcLabel} · ${meta.label}`;
+      chip.textContent = `${(KC_LABELS[obs.kc]||obs.kc).replace('\n',' ')} · ${meta.label}`;
       obsList.appendChild(chip);
     }
   }
@@ -512,12 +509,28 @@ function escHtml(s) {
 
 const slider = document.getElementById('slider');
 
-// Build tick labels
-const ticks = document.getElementById('tl-ticks');
-for (let i = 0; i <= 8; i++) {
-  const t = document.createElement('span');
-  t.textContent = i === 0 ? 'Init' : i;
-  ticks.appendChild(t);
+function initUI(filename) {
+  // Hide overlay
+  document.getElementById('no-data').style.display = 'none';
+
+  // Update filename display
+  document.getElementById('file-name').textContent = filename;
+
+  // Update slider
+  const max = TURNS.length - 1;
+  slider.max   = max;
+  slider.value = 0;
+
+  // Rebuild tick labels
+  const ticks = document.getElementById('tl-ticks');
+  ticks.innerHTML = '';
+  for (let i = 0; i <= max; i++) {
+    const t = document.createElement('span');
+    t.textContent = i === 0 ? 'Init' : i;
+    ticks.appendChild(t);
+  }
+
+  render(0);
 }
 
 slider.addEventListener('input', () => render(parseInt(slider.value)));
@@ -527,12 +540,9 @@ document.getElementById('btn-prev').addEventListener('click', () => {
   slider.value = v; render(v);
 });
 document.getElementById('btn-next').addEventListener('click', () => {
-  const v = Math.min(8, parseInt(slider.value) + 1);
+  const v = Math.min(parseInt(slider.max), parseInt(slider.value) + 1);
   slider.value = v; render(v);
 });
-
-// Initial render
-render(0);
 </script>
 </body>
 </html>
