@@ -227,8 +227,10 @@ def classify_observations(student_message: str, kcs: list[dict]) -> list[dict]:
     )
 
     try:
+        print(f"  [classifier] prompt ~{len(prompt)//4} tokens", file=sys.stderr)
         result = subprocess.run(
-            ["claude", "-p", "--no-session-persistence", "--output-format", "text", prompt],
+            ["claude", "-p", "--no-session-persistence", "--output-format", "text",
+             "--model", "claude-haiku-4-5-20251001", prompt],
             capture_output=True,
             text=True,
             timeout=45,

@@ -12,3 +12,4 @@ data/junyi/
 # Session-specific files
 conversation.jsonl
 .socratic-session.json
+.socratic-domain-cache/
