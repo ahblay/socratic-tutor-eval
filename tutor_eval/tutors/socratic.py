@@ -165,6 +165,34 @@ effective than explanation.
 """
 
 # ---------------------------------------------------------------------------
+# Response reviewer prompt
+# ---------------------------------------------------------------------------
+
+_RESPONSE_REVIEWER_PROMPT = """\
+You are a compliance checker for a Socratic tutoring session.
+The tutor has one absolute rule: NEVER give a direct answer, NEVER confirm a \
+specific answer, NEVER explain the answer — only ask questions or make \
+guiding statements that lead the student to discover the answer themselves.
+
+STUDENT MESSAGE:
+{student_message}
+
+TUTOR RESPONSE:
+{tutor_response}
+
+Does the tutor response violate the rule by directly answering the student's \
+question, confirming a correct answer, or explaining what the answer is?
+
+If the response is compliant (purely Socratic — questions, hints, redirects): \
+respond with exactly: PASS
+
+If the response is non-compliant: respond with exactly: FAIL: followed by a \
+revised version that is fully Socratic — no direct answer, no confirmation, \
+only a question or guiding statement that leads the student to think it through.
+
+Respond with PASS or FAIL: <revised response> only. No other text."""
+
+# ---------------------------------------------------------------------------
 # Accuracy reviewer prompt (hardcoded from accuracy-reviewer.md)
 # ---------------------------------------------------------------------------
 
@@ -369,21 +397,36 @@ class SocraticTutor(AbstractTutor):
         if turn > 0 and turn % 6 == 0:
             self._run_accuracy_review(history)
 
-        # Build per-turn context string
+        # Build per-turn context string (session state only — domain map is cached)
         context_str = self._build_context_str()
 
         # Build messages list
         messages = self._build_messages(history, context_str)
 
+        # System prompt: static rules block + cacheable domain map block
+        system = [
+            {"type": "text", "text": _SYSTEM_PROMPT},
+            {
+                "type": "text",
+                "text": f"## DOMAIN MAP\n{json.dumps(self.domain_map, indent=2)}",
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+
         # Call the API
         response = self.client.messages.create(
             model=self.model,
             max_tokens=1024,
-            system=_SYSTEM_PROMPT,
+            system=system,
             messages=messages,
         )
 
-        return response.content[0].text.strip()
+        reply = response.content[0].text.strip()
+
+        # Guardrail: verify response is Socratic; rewrite in-place if not
+        reply = self._enforce_socratic(student_message, reply)
+
+        return reply
 
     def session_state(self) -> dict | None:
         return deepcopy(self._state)
@@ -425,9 +468,6 @@ class SocraticTutor(AbstractTutor):
             accuracy_notes = ""
 
         lines = [
-            "## DOMAIN MAP",
-            json.dumps(dm, indent=2),
-            "",
             "## SESSION STATE",
             (
                 f"Phase: {state['current_phase']}/6 | "
@@ -480,8 +520,8 @@ class SocraticTutor(AbstractTutor):
             {
                 "role": "assistant",
                 "content": (
-                    "Understood. I have the domain map and session state. "
-                    "I'll use them to calibrate my next question."
+                    "Understood. I have the session state. "
+                    "I'll use it alongside the domain map to calibrate my next question."
                 ),
             },
         ]
@@ -543,6 +583,36 @@ class SocraticTutor(AbstractTutor):
             print(
                 f"  [accuracy-reviewer] silently failed: {e}", file=sys.stderr
             )
+
+    # ------------------------------------------------------------------
+    # Response guardrail
+    # ------------------------------------------------------------------
+
+    def _enforce_socratic(self, student_message: str, reply: str) -> str:
+        """
+        Check the tutor's reply for direct answers. If non-compliant, the
+        reviewer rewrites it in the same call. Uses Haiku for low latency.
+        """
+        prompt = _RESPONSE_REVIEWER_PROMPT.format(
+            student_message=student_message[:1000],
+            tutor_response=reply[:1000],
+        )
+        try:
+            result = self.client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            verdict = result.content[0].text.strip()
+            if verdict.startswith("FAIL:"):
+                revised = verdict[len("FAIL:"):].strip()
+                if revised:
+                    print("  [response-reviewer] non-compliant response rewritten",
+                          file=sys.stderr)
+                    return revised
+        except Exception as e:
+            print(f"  [response-reviewer] silently failed: {e}", file=sys.stderr)
+        return reply
 
 
 # ---------------------------------------------------------------------------

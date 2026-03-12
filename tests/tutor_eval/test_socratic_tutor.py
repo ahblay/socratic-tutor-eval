@@ -10,6 +10,8 @@ from tutor_eval.tutors.socratic import SocraticTutor
 from webapp.services.domain_cache import build_kg_from_domain_map, get_target_kcs
 
 
+from unittest.mock import MagicMock, patch
+
 SAMPLE_DOMAIN_MAP = {
     "topic": "DNA",
     "core_concepts": [
@@ -117,3 +119,135 @@ class TestBuildKgFromDomainMap:
         }
         kg = build_kg_from_domain_map(dm)
         assert kg["kcs"][0]["id"] == "hello-world"
+
+
+# ---------------------------------------------------------------------------
+# Prompt caching — system prompt structure
+# ---------------------------------------------------------------------------
+
+class TestPromptCaching:
+    def _make_mock_client(self, reply_text="What do you think?", reviewer_verdict="PASS"):
+        """Return a mock Anthropic client that records calls."""
+        mock_client = MagicMock()
+        # First call: tutor response
+        tutor_response = MagicMock()
+        tutor_response.content = [MagicMock(text=reply_text)]
+        # Second call: response reviewer
+        reviewer_response = MagicMock()
+        reviewer_response.content = [MagicMock(text=reviewer_verdict)]
+        mock_client.messages.create.side_effect = [tutor_response, reviewer_response]
+        return mock_client
+
+    def test_domain_map_in_system_not_messages(self):
+        """Domain map must appear in system blocks, not in the messages list."""
+        tutor = SocraticTutor("DNA", SAMPLE_DOMAIN_MAP)
+        tutor.client = self._make_mock_client()
+
+        tutor.respond("What is DNA?", [{"role": "student", "text": "What is DNA?"}])
+
+        call_kwargs = tutor.client.messages.create.call_args_list[0][1]
+        system = call_kwargs["system"]
+
+        # system must be a list of blocks
+        assert isinstance(system, list)
+        assert len(system) == 2
+
+        # Second block contains domain map and has cache_control
+        domain_block = system[1]
+        assert "DOMAIN MAP" in domain_block["text"]
+        assert "DNA Structure" in domain_block["text"]
+        assert domain_block.get("cache_control") == {"type": "ephemeral"}
+
+        # Domain map JSON must NOT be in the messages list (only the concept
+        # name may appear in session state — check for JSON-specific content)
+        messages = call_kwargs["messages"]
+        messages_text = " ".join(
+            m["content"] for m in messages if isinstance(m.get("content"), str)
+        )
+        assert '"prerequisite_for"' not in messages_text  # JSON key only in domain map
+        assert '"depth_priority"' not in messages_text
+
+    def test_session_state_in_messages_not_system(self):
+        """Session state header must be in messages injection, not system blocks."""
+        tutor = SocraticTutor("DNA", SAMPLE_DOMAIN_MAP)
+        tutor.client = self._make_mock_client()
+
+        tutor.respond("Hello", [{"role": "student", "text": "Hello"}])
+
+        call_kwargs = tutor.client.messages.create.call_args_list[0][1]
+        system_text = " ".join(b["text"] for b in call_kwargs["system"])
+        messages_text = " ".join(
+            m["content"] for m in call_kwargs["messages"]
+            if isinstance(m.get("content"), str)
+        )
+
+        # The ## SESSION STATE header is injected per-turn into messages
+        assert "## SESSION STATE" in messages_text
+        # The system blocks should not contain the per-turn header
+        assert "## SESSION STATE" not in system_text
+
+
+# ---------------------------------------------------------------------------
+# Response guardrail
+# ---------------------------------------------------------------------------
+
+class TestResponseGuardrail:
+    def _tutor_with_mock(self, tutor_reply: str, reviewer_verdict: str):
+        tutor = SocraticTutor("DNA", SAMPLE_DOMAIN_MAP)
+        mock_client = MagicMock()
+        tutor_resp = MagicMock()
+        tutor_resp.content = [MagicMock(text=tutor_reply)]
+        reviewer_resp = MagicMock()
+        reviewer_resp.content = [MagicMock(text=reviewer_verdict)]
+        mock_client.messages.create.side_effect = [tutor_resp, reviewer_resp]
+        tutor.client = mock_client
+        return tutor
+
+    def test_pass_returns_original_response(self):
+        tutor = self._tutor_with_mock(
+            tutor_reply="What do you already know about this?",
+            reviewer_verdict="PASS",
+        )
+        result = tutor.respond("What is DNA?", [{"role": "student", "text": "What is DNA?"}])
+        assert result == "What do you already know about this?"
+
+    def test_fail_returns_rewritten_response(self):
+        tutor = self._tutor_with_mock(
+            tutor_reply="DNA is a double helix made of nucleotides.",
+            reviewer_verdict="FAIL: What do you think DNA might be made of?",
+        )
+        result = tutor.respond("What is DNA?", [{"role": "student", "text": "What is DNA?"}])
+        assert result == "What do you think DNA might be made of?"
+        assert "double helix" not in result
+
+    def test_reviewer_called_on_every_turn(self):
+        tutor = SocraticTutor("DNA", SAMPLE_DOMAIN_MAP)
+        mock_client = MagicMock()
+        def make_resp(text):
+            r = MagicMock(); r.content = [MagicMock(text=text)]; return r
+        mock_client.messages.create.side_effect = [
+            make_resp("Question 1?"), make_resp("PASS"),
+            make_resp("Question 2?"), make_resp("PASS"),
+        ]
+        tutor.client = mock_client
+
+        tutor.respond("Hi", [{"role": "student", "text": "Hi"}])
+        tutor.respond("Okay", [{"role": "student", "text": "Okay"}])
+
+        # 4 total calls: 2 tutor + 2 reviewer
+        assert mock_client.messages.create.call_count == 4
+
+    def test_reviewer_failure_does_not_crash(self):
+        """If the reviewer raises an exception, the original reply is returned."""
+        tutor = SocraticTutor("DNA", SAMPLE_DOMAIN_MAP)
+        mock_client = MagicMock()
+        tutor_resp = MagicMock()
+        tutor_resp.content = [MagicMock(text="Here is the answer: 42.")]
+        mock_client.messages.create.side_effect = [
+            tutor_resp,
+            Exception("API timeout"),
+        ]
+        tutor.client = mock_client
+
+        result = tutor.respond("What is the answer?", [{"role": "student", "text": "What is the answer?"}])
+        assert result == "Here is the answer: 42."  # falls back gracefully
