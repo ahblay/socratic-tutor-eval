@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-run_simulation.py — CLI entrypoint for the tutor_eval assessment framework.
+simulation/run.py — CLI entrypoint for the tutor_eval assessment framework.
 
-Usage:
-    python run_simulation.py --profile tabula_rasa --turns 12
-    python run_simulation.py --profile partial_knowledge --turns 12
-    python run_simulation.py --profile misconception_heavy --turns 18
+Usage (from project root):
+    python simulation/run.py --profile tabula_rasa --turns 12
+    python simulation/run.py --profile partial_knowledge --turns 12
+    python simulation/run.py --profile misconception_heavy --turns 18
 
     # With explicit topic:
-    python run_simulation.py --profile tabula_rasa --topic "fractions and proportional reasoning" --turns 12
+    python simulation/run.py --profile tabula_rasa --topic "fractions and proportional reasoning" --turns 12
 
 NOTE: Set ANTHROPIC_API_KEY before running.
 NOTE: Run from a plain terminal, not inside a Claude Code session.
@@ -59,13 +59,15 @@ def main() -> None:
     from tutor_eval.tutors.socratic import SocraticTutor, load_or_compute_domain_map, compute_domain_map
     from tutor_eval.simulation import run_simulation
 
-    base_dir = Path(__file__).parent
-    kg      = load_kg(base_dir / "data" / "junyi_kg.json")
-    profile = get_profile(base_dir / "students.yaml", args.profile)
+    sim_dir  = Path(__file__).parent          # simulation/
+    root_dir = sim_dir.parent                 # project root
+
+    kg      = load_kg(root_dir / "data" / "junyi_kg.json")
+    profile = get_profile(sim_dir / "profiles" / "students.yaml", args.profile)
 
     client = anthropic.Anthropic()
 
-    cache_dir = base_dir / ".socratic-domain-cache"
+    cache_dir = root_dir / ".socratic-domain-cache"
 
     if args.no_cache:
         print(f"--no-cache: recomputing domain map for topic: {args.topic!r}")
@@ -94,7 +96,7 @@ def main() -> None:
     if args.output:
         output_file = args.output
     else:
-        runs_dir = base_dir / "runs"
+        runs_dir = sim_dir / "runs"
         runs_dir.mkdir(exist_ok=True)
         stamp       = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         output_file = str(runs_dir / f"{stamp}_sdk_{args.profile}.jsonl")
