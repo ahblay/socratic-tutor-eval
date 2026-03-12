@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socratic-tutor"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.84.0",
+    "pyyaml>=6.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.13.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib>=1.7.4",
+    "httpx>=0.27.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.9",
+    "beautifulsoup4>=4.12.0",
+    "aiosqlite>=0.20.0",
+    "greenlet>=3.0.0",
+]
+
+[project.scripts]
+run-simulation = "simulation.run:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tutor_eval*", "webapp*", "simulation*"]
