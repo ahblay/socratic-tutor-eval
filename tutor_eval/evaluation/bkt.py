@@ -208,6 +208,7 @@ def classify_observations(
     target_kcs: list[str] | None = None,
     frontier: list[str] | None = None,
     kg: dict | None = None,
+    verbose: bool = False,
 ) -> list[dict]:
     """
     Classify which KCs the student's message engages with, using a filtered KC list.
@@ -227,10 +228,11 @@ def classify_observations(
     )
 
     try:
-        print(
-            f"  [classifier] {len(kcs)} KCs, prompt ~{len(prompt)//4} tokens",
-            file=sys.stderr,
-        )
+        if verbose:
+            print(
+                f"  [classifier] {len(kcs)} KCs, prompt ~{len(prompt)//4} tokens",
+                file=sys.stderr,
+            )
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=512,
@@ -324,12 +326,25 @@ def _estimate_phase(
 # ---------------------------------------------------------------------------
 
 class BKTEvaluator:
-    def __init__(self, profile: dict, kg: dict) -> None:
-        self.profile    = profile
-        self.kg         = kg
-        self.bkt_states = init_bkt_states(profile, kg)
-        self.target_kcs = profile.get("target_kcs", [])
-        self.client     = anthropic.Anthropic()
+    def __init__(
+        self,
+        profile: dict | None = None,
+        kg: dict | None = None,
+        bkt_states: dict[str, BKTState] | None = None,
+        target_kcs: list[str] | None = None,
+    ) -> None:
+        self.profile = profile or {}
+        self.kg      = kg or {"kcs": [], "edges": []}
+        self.client  = anthropic.Anthropic()
+
+        if bkt_states is not None:
+            self.bkt_states = bkt_states
+            self.target_kcs = target_kcs or []
+        else:
+            self.bkt_states = init_bkt_states(self.profile, self.kg)
+            self.target_kcs = target_kcs if target_kcs is not None else self.profile.get("target_kcs", [])
+
+        self.verbose = False  # set to True to enable classifier diagnostics
 
     def evaluate_turn(self, student_message: str) -> dict:
         """
@@ -357,6 +372,7 @@ class BKTEvaluator:
             target_kcs=self.target_kcs,
             frontier=current_frontier,
             kg=self.kg,
+            verbose=self.verbose,
         )
 
         # Apply BKT updates

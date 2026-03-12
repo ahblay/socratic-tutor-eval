@@ -336,21 +336,25 @@ class SocraticTutor(AbstractTutor):
         topic: str,
         domain_map: dict,
         model: str = "claude-sonnet-4-6",
+        state: dict | None = None,
     ) -> None:
         self.topic = topic
         self.domain_map = domain_map
         self.model = model
         self.client = anthropic.Anthropic()
 
-        self._state: dict = {
-            "current_phase": 1,
-            "current_concept_index": 0,
-            "student_understanding": [],
-            "learning_style": None,
-            "frustration_level": "none",
-            "turn_count": 0,
-            "accuracy_issues_open": [],
-        }
+        if state is not None:
+            self._state = deepcopy(state)
+        else:
+            self._state = {
+                "current_phase": 1,
+                "current_concept_index": 0,
+                "student_understanding": [],
+                "learning_style": None,
+                "frustration_level": "none",
+                "turn_count": 0,
+                "accuracy_issues_open": [],
+            }
 
     # ------------------------------------------------------------------
     # AbstractTutor interface
