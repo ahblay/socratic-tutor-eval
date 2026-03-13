@@ -7,7 +7,9 @@ Stub implementation — hot path (POST /turn) is Phase 3.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,8 +42,6 @@ class TurnRequest(BaseModel):
 
 class TurnResponse(BaseModel):
     reply: str
-    bkt_snapshot: dict
-    frontier: list[str]
     turn_number: int
 
 
@@ -103,22 +103,96 @@ async def get_session(
 async def post_turn(
     session_id: str,
     body: TurnRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """
-    Main conversation turn.  Full implementation in Phase 3.
+    One tutoring exchange:
+      1. Validate session is active
+      2. Load turn history from DB
+      3. Reconstruct SocraticTutor from saved state
+      4. Call respond() in a thread (sync SDK call)
+      5. Persist student + tutor turns, update session state
     """
+    from tutor_eval.tutors.socratic import SocraticTutor
+
     session = await _get_session_or_404(session_id, user.id, db)
-    if session.status not in ("active",):
+    if session.status != "active":
         raise HTTPException(
             status_code=409,
             detail=f"Session is not active (status: {session.status})",
         )
 
-    # TODO (Phase 3): reconstruct SocraticTutor from tutor_state_snapshot,
-    # call respond(), run BKTEvaluator, persist states, serialize tutor state.
-    raise HTTPException(status_code=501, detail="Turn processing not yet implemented")
+    # Load the article for domain_map and topic
+    article_result = await db.execute(
+        select(Article).where(Article.id == session.article_id)
+    )
+    article = article_result.scalar_one()
+
+    # Load existing turns to build history for the tutor
+    turns_result = await db.execute(
+        select(Turn)
+        .where(Turn.session_id == session_id)
+        .order_by(Turn.turn_number)
+    )
+    existing_turns = turns_result.scalars().all()
+
+    # Convert DB turns to tutor history format
+    history = [
+        {
+            "role": "student" if t.role == "user" else "tutor",
+            "text": t.content,
+        }
+        for t in existing_turns
+    ]
+
+    # Append the current student message
+    history.append({"role": "student", "text": body.message})
+
+    # Reconstruct the tutor from saved state (None = fresh start)
+    tutor = SocraticTutor(
+        topic=article.canonical_title,
+        domain_map=article.domain_map,
+        state=session.tutor_state_snapshot,
+    )
+
+    # Call respond() in a thread pool (sync Anthropic SDK)
+    reply = await asyncio.to_thread(tutor.respond, body.message, history)
+
+    raw_reply = tutor._last_raw_response or reply
+    tutor_state = tutor.session_state()
+
+    # Next turn number (each exchange = 2 rows: user + tutor)
+    next_turn_number = len(existing_turns) + 1
+
+    # Persist student turn
+    student_turn = Turn(
+        session_id=session_id,
+        turn_number=next_turn_number,
+        role="user",
+        content=body.message,
+    )
+    db.add(student_turn)
+
+    # Persist tutor turn
+    tutor_turn = Turn(
+        session_id=session_id,
+        turn_number=next_turn_number + 1,
+        role="tutor",
+        content=reply,
+        raw_content=raw_reply,
+        tutor_state_snapshot=tutor_state,
+    )
+    db.add(tutor_turn)
+
+    # Update session
+    session.turn_count += 1
+    session.tutor_state_snapshot = tutor_state
+
+    await db.commit()
+
+    return TurnResponse(reply=reply, turn_number=session.turn_count)
 
 
 @router.post("/{session_id}/end")

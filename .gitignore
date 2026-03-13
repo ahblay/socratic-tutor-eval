@@ -20,3 +20,6 @@ simulation/runs/
 # Runtime artifacts
 webapp.db
 *.db
+
+# Local-only documentation (not for the repo)
+docs/future_directions.md

@@ -123,9 +123,14 @@ class Turn(Base):
     turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
     # "user" | "tutor"
     role: Mapped[str] = mapped_column(String, nullable=False)
+    # For tutor turns: guardrail-approved response (shown to student)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # For tutor turns: raw pre-guardrail response (used for NAC metric)
+    raw_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # For tutor turns: SocraticTutor.session_state() snapshot (used for TSU metric)
+    tutor_state_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    # BKT snapshot written after evaluating user turns
+    # BKT snapshot written after evaluating user turns (post-hoc analysis)
     evaluator_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     session: Mapped[Session] = relationship("Session", back_populates="turns")

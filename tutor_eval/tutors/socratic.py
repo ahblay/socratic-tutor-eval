@@ -371,6 +371,8 @@ class SocraticTutor(AbstractTutor):
         self.model = model
         self.client = anthropic.Anthropic()
 
+        self._last_raw_response: str | None = None
+
         if state is not None:
             self._state = deepcopy(state)
         else:
@@ -421,10 +423,13 @@ class SocraticTutor(AbstractTutor):
             messages=messages,
         )
 
-        reply = response.content[0].text.strip()
+        raw_reply = response.content[0].text.strip()
+
+        # Store raw response before guardrail (for NAC metric logging)
+        self._last_raw_response = raw_reply
 
         # Guardrail: verify response is Socratic; rewrite in-place if not
-        reply = self._enforce_socratic(student_message, reply)
+        reply = self._enforce_socratic(student_message, raw_reply)
 
         return reply
 

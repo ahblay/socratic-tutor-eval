@@ -303,3 +303,567 @@ class TestSessions:
         )
         assert r.status_code == 200
         assert r.json()["turns"] == []
+
+
+# ---------------------------------------------------------------------------
+# Turn hot path
+# ---------------------------------------------------------------------------
+
+async def _activate_session(client, token, article_id) -> str:
+    """Create a session and manually set it to active (bypassing assessment)."""
+    session_id = await _create_session(client, token, article_id)
+    async with TestSessionLocal() as db:
+        from sqlalchemy import select
+        from webapp.db.models import Session
+        result = await db.execute(select(Session).where(Session.id == session_id))
+        session = result.scalar_one()
+        session.status = "active"
+        await db.commit()
+    return session_id
+
+
+class TestTurnHotPath:
+    async def test_turn_requires_active_session(self, client):
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        session_id = await _create_session(client, token, article_id)
+        # Session is pre_assessment, not active
+        r = await client.post(
+            f"/api/sessions/{session_id}/turn",
+            json={"message": "Hello"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 409
+
+    async def test_turn_returns_reply(self, client):
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        session_id = await _activate_session(client, token, article_id)
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="What do you think?") as mock_respond:
+            r = await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "I think DNA is made of cells."},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert r.status_code == 200
+        assert r.json()["reply"] == "What do you think?"
+        assert r.json()["turn_number"] == 1
+
+    async def test_turn_saves_transcript(self, client):
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        session_id = await _activate_session(client, token, article_id)
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="Can you elaborate?"):
+            await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "DNA is a molecule."},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        r = await client.get(
+            f"/api/sessions/{session_id}/transcript",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        turns = r.json()["turns"]
+        assert len(turns) == 2  # student turn + tutor turn
+        roles = [t["role"] for t in turns]
+        assert roles == ["user", "tutor"]
+
+    async def test_turn_increments_turn_count(self, client):
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        session_id = await _activate_session(client, token, article_id)
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="Interesting."):
+            await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "First message."},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "Second message."},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        r = await client.get(
+            f"/api/sessions/{session_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.json()["turn_count"] == 2
+
+    async def test_turn_rejects_completed_session(self, client):
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        session_id = await _activate_session(client, token, article_id)
+
+        await client.post(
+            f"/api/sessions/{session_id}/end",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="Too late."):
+            r = await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "Hello?"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert r.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Assessment fixtures and helpers
+# ---------------------------------------------------------------------------
+
+RICH_DOMAIN_MAP = {
+    "topic": "DNA",
+    "core_concepts": [
+        {
+            "concept": "Nucleotides",
+            "description": "Building blocks of DNA",
+            "prerequisite_for": ["Double Helix"],
+            "depth_priority": "essential",
+        },
+        {
+            "concept": "Double Helix",
+            "description": "The twisted-ladder structure of DNA",
+            "prerequisite_for": [],
+            "depth_priority": "essential",
+        },
+    ],
+    "recommended_sequence": ["Nucleotides", "Double Helix"],
+    "common_misconceptions": [],
+    "checkpoint_questions": [
+        {
+            "after_concept": "Nucleotides",
+            "question": "What is a nucleotide?",
+            "what_a_good_answer_demonstrates": "...",
+        },
+        {
+            "after_concept": "Double Helix",
+            "question": "Describe the double helix structure.",
+            "what_a_good_answer_demonstrates": "...",
+        },
+    ],
+}
+
+
+async def _resolve_rich_article(client) -> str:
+    """Resolve an article with a two-concept domain map (for propagation tests)."""
+    from webapp.services.wikipedia import WikiArticle, WikiSection
+    mock_article = WikiArticle(
+        page_id=99999,
+        canonical_title="DNA",
+        wikipedia_url="https://en.wikipedia.org/wiki/DNA",
+        summary="DNA is a molecule.",
+        sections=[WikiSection(title="Intro", level=1, text="Some content.")],
+    )
+    with patch("webapp.api.articles.fetch_article", return_value=mock_article), \
+         patch("webapp.api.articles._compute_domain_map_bg", new_callable=AsyncMock):
+        r = await client.post("/api/articles/resolve", json={"url": "https://en.wikipedia.org/wiki/DNA"})
+    article_id = r.json()["article_id"]
+
+    async with TestSessionLocal() as db:
+        from sqlalchemy import select
+        from webapp.db.models import Article
+        result = await db.execute(select(Article).where(Article.id == article_id))
+        article = result.scalar_one()
+        article.domain_map_status = "ready"
+        article.domain_map = RICH_DOMAIN_MAP
+        await db.commit()
+
+    return article_id
+
+
+async def _start_assessment(client, token, session_id) -> str:
+    r = await client.post(
+        f"/api/sessions/{session_id}/assessment/start",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200
+    return r.json()["question_text"]
+
+
+async def _answer(client, token, session_id, answer: str, mock_class: str = "partial"):
+    with patch("webapp.api.assessment.classify_opener_answer", return_value=mock_class), \
+         patch("webapp.api.assessment.classify_assessment_answer", return_value=mock_class):
+        r = await client.post(
+            f"/api/sessions/{session_id}/assessment/answer",
+            json={"answer": answer},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    return r
+
+
+# ---------------------------------------------------------------------------
+# Assessment integration tests
+# ---------------------------------------------------------------------------
+
+class TestAssessment:
+    async def test_start_creates_opener_question(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+
+        r = await client.post(
+            f"/api/sessions/{session_id}/assessment/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["question_index"] == 0
+        assert data["kc_id"] == "__opener__"
+        assert "DNA" in data["question_text"]
+        assert data["assessment_complete"] is False
+
+    async def test_start_idempotent(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+
+        r1 = await client.post(
+            f"/api/sessions/{session_id}/assessment/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        r2 = await client.post(
+            f"/api/sessions/{session_id}/assessment/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert r1.json()["question_text"] == r2.json()["question_text"]
+
+        # Only one Assessment row should exist
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select, func
+            from webapp.db.models import Assessment
+            result = await db.execute(
+                select(func.count()).where(Assessment.session_id == session_id)
+            )
+            assert result.scalar() == 1
+
+    async def test_start_requires_pre_assessment_status(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _activate_session(client, token, article_id)
+
+        r = await client.post(
+            f"/api/sessions/{session_id}/assessment/start",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 409
+
+    async def test_answer_without_start_returns_409(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+
+        r = await _answer(client, token, session_id, "I don't know.")
+        assert r.status_code == 409
+
+    async def test_answer_opener_returns_followup(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+        await _start_assessment(client, token, session_id)
+
+        r = await _answer(client, token, session_id, "I know a little.", mock_class="partial")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["assessment_complete"] is False
+        assert data["question_index"] == 1
+        assert data["question_text"] is not None
+        assert data["observation_class"] == "partial"
+
+    async def test_answer_opener_mastered_limits_to_one_followup(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+        await _start_assessment(client, token, session_id)
+
+        r = await _answer(client, token, session_id, "I know DNA well.", mock_class="mastered")
+        assert r.status_code == 200
+        assert r.json()["assessment_complete"] is False
+
+        # One follow-up issued; answering it should complete the assessment
+        r2 = await _answer(client, token, session_id, "Nucleotides are...", mock_class="mastered")
+        assert r2.json()["assessment_complete"] is True
+
+    async def test_answer_saves_observation_class(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+        await _start_assessment(client, token, session_id)
+
+        await _answer(client, token, session_id, "Some answer.", mock_class="partial")
+
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import Assessment
+            result = await db.execute(
+                select(Assessment).where(
+                    Assessment.session_id == session_id,
+                    Assessment.question_index == 0,
+                )
+            )
+            row = result.scalar_one()
+            assert row.observation_class == "partial"
+            assert row.user_answer == "Some answer."
+
+    async def test_answer_wrong_status_returns_409(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _activate_session(client, token, article_id)
+
+        r = await _answer(client, token, session_id, "Hello.")
+        assert r.status_code == 409
+
+    async def test_complete_transitions_session_to_active(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+        await _start_assessment(client, token, session_id)
+        await _answer(client, token, session_id, "I know a bit.", mock_class="partial")
+
+        r = await client.post(
+            f"/api/sessions/{session_id}/assessment/complete",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "active"
+
+        r2 = await client.get(
+            f"/api/sessions/{session_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r2.json()["status"] == "active"
+
+    async def test_complete_writes_bkt_rows_for_all_kcs(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+        await _start_assessment(client, token, session_id)
+        await _answer(client, token, session_id, "I know a bit.", mock_class="partial")
+
+        r = await client.post(
+            f"/api/sessions/{session_id}/assessment/complete",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.json()["bkt_initialized"] == 2  # Nucleotides + Double Helix
+
+    async def test_complete_without_answers_returns_409(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+
+        r = await client.post(
+            f"/api/sessions/{session_id}/assessment/complete",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 409
+
+    async def test_complete_already_active_returns_409(self, client):
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+        await _start_assessment(client, token, session_id)
+        await _answer(client, token, session_id, "I know.", mock_class="partial")
+
+        await client.post(
+            f"/api/sessions/{session_id}/assessment/complete",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        r = await client.post(
+            f"/api/sessions/{session_id}/assessment/complete",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 409
+
+    async def test_bkt_propagation_mastered_raises_prerequisite(self, client):
+        """If student masters Double Helix, Nucleotides (its prereq) should get raised L0."""
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+        await _start_assessment(client, token, session_id)
+
+        # Opener: partial → 3 follow-ups queued
+        await _answer(client, token, session_id, "Some knowledge.", mock_class="partial")
+        # Follow-up 1 targets Nucleotides (root) — mark mastered
+        await _answer(client, token, session_id, "Nucleotides are the building blocks.", mock_class="mastered")
+
+        await client.post(
+            f"/api/sessions/{session_id}/assessment/complete",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import BKTStateRow
+            result = await db.execute(
+                select(BKTStateRow).where(
+                    BKTStateRow.session_id == session_id if hasattr(BKTStateRow, "session_id") else BKTStateRow.article_id == article_id,
+                    BKTStateRow.kc_id == "nucleotides",
+                )
+            )
+            row = result.scalar_one_or_none()
+            assert row is not None
+            assert row.p_mastered >= 0.85
+
+    async def test_bkt_propagation_absent_lowers_dependent(self, client):
+        """If student has absent knowledge of Nucleotides (prereq), Double Helix should be lowered."""
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+        await _start_assessment(client, token, session_id)
+
+        # Opener: absent
+        await _answer(client, token, session_id, "I don't know.", mock_class="absent")
+        # Follow-up targets Nucleotides — mark absent
+        await _answer(client, token, session_id, "No idea.", mock_class="absent")
+
+        await client.post(
+            f"/api/sessions/{session_id}/assessment/complete",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import BKTStateRow
+            result = await db.execute(
+                select(BKTStateRow).where(
+                    BKTStateRow.article_id == article_id,
+                    BKTStateRow.kc_id == "double-helix",
+                )
+            )
+            row = result.scalar_one_or_none()
+            assert row is not None
+            assert row.p_mastered <= 0.15
+
+    async def test_turn_works_after_assessment_complete(self, client):
+        """Full flow: assessment → active → turn accepted."""
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+        await _start_assessment(client, token, session_id)
+        await _answer(client, token, session_id, "Some knowledge.", mock_class="partial")
+        await client.post(
+            f"/api/sessions/{session_id}/assessment/complete",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="What do you think?"):
+            r = await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "Hello."},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert r.status_code == 200
+
+    async def test_turn_rejected_during_assessment(self, client):
+        """Turn must be rejected while session is still in pre_assessment (regression guard)."""
+        token = await _register(client)
+        article_id = await _resolve_rich_article(client)
+        session_id = await _create_session(client, token, article_id)
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="Hi."):
+            r = await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "Hello."},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert r.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Assessment service unit tests (no HTTP, no DB)
+# ---------------------------------------------------------------------------
+
+class TestAssessmentService:
+    def test_select_followup_kcs_returns_roots(self):
+        from webapp.services.assessment_service import select_followup_kcs
+        dm = {
+            "core_concepts": [
+                {"concept": "A", "description": "", "prerequisite_for": ["B"], "depth_priority": "essential"},
+                {"concept": "B", "description": "", "prerequisite_for": [], "depth_priority": "essential"},
+            ],
+            "recommended_sequence": ["A", "B"],
+            "checkpoint_questions": [],
+        }
+        result = select_followup_kcs(dm)
+        # A has no upstream (nothing lists A as a dependent), B is downstream of A
+        assert result[0]["kc_id"] == "a"
+
+    def test_select_followup_kcs_caps_at_max(self):
+        from webapp.services.assessment_service import select_followup_kcs
+        dm = {
+            "core_concepts": [
+                {"concept": f"C{i}", "description": "", "prerequisite_for": [], "depth_priority": "essential"}
+                for i in range(6)
+            ],
+            "recommended_sequence": [f"C{i}" for i in range(6)],
+            "checkpoint_questions": [],
+        }
+        result = select_followup_kcs(dm, max_followups=3)
+        assert len(result) == 3
+
+    def test_propagate_l0_global_prior_fills_unassessed(self):
+        from webapp.services.assessment_service import propagate_l0
+        dm = {
+            "core_concepts": [
+                {"concept": "X", "description": "", "prerequisite_for": [], "depth_priority": "essential"},
+                {"concept": "Y", "description": "", "prerequisite_for": [], "depth_priority": "essential"},
+            ],
+            "recommended_sequence": ["X", "Y"],
+        }
+        result = propagate_l0(dm, assessed_kcs={}, global_prior="partial")
+        assert abs(result["x"] - 0.25) < 0.01
+        assert abs(result["y"] - 0.25) < 0.01
+
+    def test_propagate_l0_mastered_raises_prereq(self):
+        from webapp.services.assessment_service import propagate_l0
+        dm = {
+            "core_concepts": [
+                {"concept": "Prereq", "description": "", "prerequisite_for": ["Dep"], "depth_priority": "essential"},
+                {"concept": "Dep", "description": "", "prerequisite_for": [], "depth_priority": "essential"},
+            ],
+            "recommended_sequence": ["Prereq", "Dep"],
+        }
+        # Student masters Dep → Prereq should be raised
+        result = propagate_l0(dm, assessed_kcs={"dep": "mastered"}, global_prior="absent")
+        assert result["prereq"] >= 0.85
+
+    def test_propagate_l0_absent_lowers_dependent(self):
+        from webapp.services.assessment_service import propagate_l0
+        dm = {
+            "core_concepts": [
+                {"concept": "Prereq", "description": "", "prerequisite_for": ["Dep"], "depth_priority": "essential"},
+                {"concept": "Dep", "description": "", "prerequisite_for": [], "depth_priority": "essential"},
+            ],
+            "recommended_sequence": ["Prereq", "Dep"],
+        }
+        # Student absent on Prereq → Dep should be lowered
+        result = propagate_l0(dm, assessed_kcs={"prereq": "absent"}, global_prior="mastered")
+        assert result["dep"] <= 0.15
+
+    def test_propagate_l0_clamps_to_bounds(self):
+        from webapp.services.assessment_service import propagate_l0
+        dm = {
+            "core_concepts": [
+                {"concept": "Z", "description": "", "prerequisite_for": [], "depth_priority": "essential"},
+            ],
+            "recommended_sequence": ["Z"],
+        }
+        result = propagate_l0(dm, assessed_kcs={"z": "mastered"}, global_prior="mastered")
+        assert all(0.01 <= v <= 0.99 for v in result.values())
+
+    def test_class_from_l0_thresholds(self):
+        from webapp.services.assessment_service import class_from_l0
+        assert class_from_l0(0.90) == "mastered"
+        assert class_from_l0(0.70) == "mastered"
+        assert class_from_l0(0.69) == "partial"
+        assert class_from_l0(0.30) == "partial"
+        assert class_from_l0(0.29) == "absent"
+        assert class_from_l0(0.10) == "absent"
