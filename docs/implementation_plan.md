@@ -36,39 +36,64 @@
 - pbkdf2_sha256 password hashing (not bcrypt — avoids 72-byte limit)
 - JWT tokens via python-jose
 
-### Phase 3 — Turn Hot Path ⬜
+### Phase 3 — Turn Hot Path ✅
 Core of the webapp. One tutoring exchange:
-1. Receive student message
-2. Load session + article from DB
+1. Receive student message + API key header
+2. Load session + article from DB; enforce turn budget (402 if exhausted)
 3. Reconstruct `SocraticTutor(topic, domain_map, state=tutor_state_snapshot)`
-4. Call `tutor.respond(message, client=anthropic_client)`
-5. Save Turn row: student message, raw reply, guardrail reply, timestamp
-6. Update `session.tutor_state_snapshot` with `tutor.session_state()`
+4. Call `tutor.respond(message)` via `asyncio.to_thread`
+5. Save Turn rows: student message + tutor reply (raw pre-guardrail + guardrail reply + tutor state snapshot)
+6. Update `session.tutor_state_snapshot`, increment `turn_count` and token counters
 7. Return guardrail reply to client
 
 Key design decision: **no BKT or evaluation during the turn**. Pure data collection.
 
-### Phase 4 — Pre-Session Assessment ⬜
+### Phase 4 — Pre-Session Assessment ✅
 Brief protocol at session start to initialize BKT L0 values for human students.
 
 **Format:**
 - Fixed opener: "Before we begin, briefly describe what you already know about [topic]."
-- Up to 3 targeted follow-ups targeting foundational KCs (prerequisites-of-prerequisites)
+- Up to 3 targeted follow-ups targeting foundational KCs (graph roots — no upstream dependencies)
+- Short-circuit: if opener classified as "mastered", only 1 follow-up
 - Max 4 questions total
 
 **Implementation:**
-- `POST /api/sessions/{id}/assessment/start` — generate opener, create Assessment row
-- `POST /api/sessions/{id}/assessment/answer` — classify response, generate follow-up or finish
-- `POST /api/sessions/{id}/assessment/complete` — compute L0s, store in `bkt_states`, transition session to `active`
+- `POST /api/sessions/{id}/assessment/start` — idempotent, creates opener row, pre-computes follow-up queue stored in `session.tutor_state_snapshot`
+- `POST /api/sessions/{id}/assessment/answer` — Haiku classification, creates next question row or signals `assessment_complete`
+- `POST /api/sessions/{id}/assessment/complete` — 4-phase L0 propagation, upserts BKTStateRows, transitions session to `active`
 
 ### Phase 5 — Frontend ⬜
-Minimal browser UI:
-- Article URL input → poll for domain map readiness
-- Pre-assessment chat interface
-- Tutoring session chat interface
-- Transcript view
+Single-page web UI (plain HTML/CSS/JS, no build step, no framework).
 
-Could also be a browser extension that overlays on Wikipedia pages.
+**Files:**
+- `webapp/templates/index.html` — single HTML shell
+- `webapp/static/style.css` — dark slate theme, matching visualize.html
+- `webapp/static/auth.js` — token management, BYOK key storage, login/register/anonymous
+- `webapp/static/article.js` — URL resolution, domain map polling
+- `webapp/static/assessment.js` — assessment loop (promise-based one-shot input handler)
+- `webapp/static/chat.js` — DOM manipulation for message bubbles, thinking indicator
+- `webapp/static/app.js` — state machine orchestration, `apiFetch` utility
+
+**State machine phases:** `auth` → `article` → `chat (assessment)` → `chat (tutoring)` → `ended`
+
+**Auth flow:**
+- First visit: auto-create anonymous user (no login screen shown)
+- Optional sign-in/register for returning users
+- Consent checkbox (not pre-checked) required at registration: "Conversation transcripts are collected to evaluate tutor performance."
+- JWT token + BYOK API key stored in `localStorage`
+
+**BYOK + turn budget UI:**
+- API key input field in settings/auth screen
+- Turn limit input (default: 50) alongside API key
+- Remaining turns shown during session
+- HTTP 402 response → friendly "Budget reached" message
+
+**Backend additions needed before implementing:**
+- `GET /` route in `app.py` to serve `index.html`
+- `Session.max_turns`, `Session.total_input_tokens`, `Session.total_output_tokens` columns
+- `User.consented_at` column
+- `X-API-Key` header extraction in `post_turn` route
+- HTTP 402 response when turn budget exhausted
 
 ### Phase 6 — Knowledge Map ⬜
 Visual representation of student's current KC mastery across the domain map graph.
@@ -106,11 +131,11 @@ Includes: domain map, initial BKT L0s, full turn-by-turn transcript with pre/pos
 
 ## Test Coverage
 
-76 tests passing as of last commit:
+104 tests passing as of last commit:
 - `tests/tutor_eval/test_bkt.py` (23 tests) — BKT math, frontier, KC filtering
 - `tests/tutor_eval/test_socratic_tutor.py` (17 tests) — state, caching, guardrail
 - `tests/webapp/test_wikipedia.py` (14 tests) — URL parsing, HTTP mocks
-- `tests/webapp/test_api.py` (22 tests) — auth, articles, sessions (in-memory SQLite)
+- `tests/webapp/test_api.py` (50 tests) — auth, articles, sessions, assessment (in-memory SQLite)
 
 All new features should include corresponding tests. Run with:
 ```bash
@@ -119,9 +144,7 @@ pytest
 
 ---
 
-## Pending Design Questions
-
-All resolved as of 2026-03-13:
+## Resolved Design Decisions
 
 | Question | Decision |
 |----------|----------|
@@ -130,3 +153,9 @@ All resolved as of 2026-03-13:
 | KFT: per-response or aggregate? | Per-turn, computed by evaluator during post-hoc analysis |
 | Tangent handling | Natural handling during session; evaluator partitions on-topic/tangent; THQ metric |
 | Pre-assessment format | Hybrid: fixed opener + ≤3 targeted follow-ups on foundational KCs; max 4 questions |
+| API key model | BYOK — user provides own Anthropic key; sent per-request, never persisted |
+| Cost / rate limiting | Turn-based budget set at session creation; server enforces; token counts accumulated silently |
+| User accounts | Full registration (email + password) + anonymous; learning history linked to accounts is future work |
+| Data collection consent | Checkbox at registration (not pre-checked); plain-language disclosure; satisfies PIPEDA + basic GDPR |
+| Prompt injection security | No real harm possible (text-only API, no tools); guardrail handles Socratic compliance; monitor failure modes |
+| Scaling cost model | BYOK for MVP; reassess with hosted key + subscription once product validated |

@@ -6,7 +6,7 @@ A two-part system for studying Socratic tutoring effectiveness:
 
 1. **Evaluation Framework** (`tutor_eval/`): Runs simulated student–tutor dialogues using BKT to measure how well a Socratic tutor guides learning. Used for offline experimentation with synthetic student profiles.
 
-2. **Wikipedia Socratic Tutor** (`webapp/`): A web application where real humans learn Wikipedia articles through Socratic dialogue. Its **primary purpose is data collection** — generating real student–tutor conversation transcripts that are later fed through the evaluation framework.
+2. **Wikipedia Socratic Tutor** (`webapp/`): A web application where real humans learn Wikipedia articles through Socratic dialogue. Its **dual purpose** is (a) data collection — generating real student–tutor conversation transcripts that are later fed through the evaluation framework — and (b) a long-term public service for guided learning.
 
 ## Core Idea
 
@@ -17,6 +17,12 @@ For real sessions (webapp), all evaluation is **post-hoc**: the webapp collects 
 ## Research Context
 
 This is a research project at the University of Alberta (CMPUT658). The evaluation metrics and framework are described in `Socratic_Tutor.pdf` in the project root.
+
+## Long-Term Vision
+
+The webapp is intended to eventually be a publicly available service for guided learning — not just a research data collection tool. The MVP focuses on learning a single Wikipedia article per session. Future work includes linking learning history to user accounts, spaced repetition, and a knowledge map visualization.
+
+Cost is a scaling concern: the current configuration (Sonnet for tutoring + Haiku for guardrail/assessment) is not viable for a large free user base. A hosted subscription or credits model will be assessed once the product is validated. See the API Key & Cost section below.
 
 ## Repository Layout
 
@@ -62,6 +68,33 @@ pytest
 # Run webapp
 uvicorn webapp.app:create_app --factory --reload
 ```
+
+## API Key & Cost Model
+
+**Current model: Bring Your Own Key (BYOK)**
+
+Users provide their own Anthropic API key when starting a session. The key is:
+- Sent as a request header on each API call
+- Used server-side for that request only — never persisted to the DB
+- Stored in the browser's `localStorage` between page loads
+
+Users also set a **turn budget** (max turns per session) when entering their key. The server enforces this limit before each API call, returning HTTP 402 when the budget is exhausted.
+
+Token usage (input/output tokens) is accumulated per session from API response metadata and stored in the `sessions` table for cost analysis.
+
+**Known limitation**: The API key is transmitted over HTTPS to the server and stored in `localStorage`. This is an accepted risk for a BYOK pattern (standard in open-source LLM tooling). The server must never log request headers containing the key.
+
+**Future model**: When cost per session is well understood and the product is validated, switch to an operator-hosted key with a subscription or per-session credits model.
+
+## Data Collection & Privacy
+
+Users are informed at account creation that conversation transcripts are collected to evaluate tutor performance. A consent checkbox (not pre-checked) is required before registration completes.
+
+Applicable privacy frameworks:
+- **PIPEDA** (Canada, primary): satisfied by explicit consent at registration
+- **GDPR** (EU users): basic consent satisfied; full compliance (right to deletion, DPO) is future work at scale
+
+No personally identifiable information is shared with third parties. The Anthropic API receives conversation text but not user identity.
 
 ## Key Dependencies
 

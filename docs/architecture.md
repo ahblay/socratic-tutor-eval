@@ -111,6 +111,16 @@ Steps through transcript turn-by-turn:
 4. Evaluate tutor question against frontier (KFT)
 5. Detect tangent turns; evaluate tangent handling (THQ)
 
+## Component: BYOK API Key Handling
+
+Users provide their own Anthropic API key. It is passed as a custom request header (`X-API-Key`) on session creation and each turn request. The server reads it per-request and passes it to the `SocraticTutor` — it is never written to the DB.
+
+**Turn budget enforcement**: `Session.max_turns` is set at session creation. `POST /sessions/{id}/turn` checks `session.turn_count < session.max_turns` before invoking the tutor. Returns HTTP 402 if budget exhausted.
+
+**Token tracking**: After each tutor API call, `session.total_input_tokens` and `session.total_output_tokens` are incremented from the response's `usage` field. Stored for cost analysis; not shown to users in MVP.
+
+**Security note**: The API key is transmitted over HTTPS and stored in browser `localStorage`. The server must never log request headers. This is the accepted BYOK risk profile.
+
 ## Webapp Session Lifecycle
 
 ```
@@ -130,10 +140,16 @@ POST /api/export/{id}/analyze       → run post-hoc evaluation
 
 | Table | Purpose |
 |-------|---------|
-| `users` | registered + anonymous users, JWT auth |
+| `users` | registered + anonymous users, JWT auth, consent timestamp |
 | `articles` | Wikipedia articles, domain map JSON, status |
-| `sessions` | tutoring sessions, tutor_state_snapshot (per-turn JSON), status |
-| `turns` | one row per exchange: student message, raw tutor reply, guardrail reply, KC classifications |
+| `sessions` | tutoring sessions, tutor_state_snapshot, max_turns, token usage counters |
+| `turns` | one row per message: student message OR tutor reply (raw + guardrail) + tutor state snapshot |
 | `bkt_states` | per (user, article, KC): current p_mastered |
 | `assessments` | pre-session assessment Q&A, initial L0 estimates |
 | `retention_schedule` | spaced repetition scheduling (future) |
+
+**Pending schema additions** (needed before Phase 5 implementation):
+- `sessions.max_turns` (Integer) — turn budget set at session creation
+- `sessions.total_input_tokens` (Integer, default 0) — accumulated from API responses
+- `sessions.total_output_tokens` (Integer, default 0) — accumulated from API responses
+- `users.consented_at` (DateTime, nullable) — timestamp of data collection consent
