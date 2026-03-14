@@ -60,6 +60,7 @@ const Article = (() => {
     document.getElementById("article-summary").textContent = data.summary || "";
     document.getElementById("article-kc-count").textContent =
       data.kc_count ? `${data.kc_count} knowledge concepts identified` : "";
+    document.getElementById("btn-start-session").disabled = !data.kc_count;
     document.getElementById("article-card").classList.remove("hidden");
   }
 

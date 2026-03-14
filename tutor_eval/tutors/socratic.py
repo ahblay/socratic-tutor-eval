@@ -636,13 +636,16 @@ def compute_domain_map(topic: str, client: anthropic.Anthropic) -> dict:
     try:
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=4096,
+            max_tokens=8192,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.content[0].text.strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
         return json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"  [domain-mapper] JSON parse failed: {e}; re-raising", file=sys.stderr)
+        raise
     except Exception as e:
         print(f"  [domain-mapper] failed: {e}; returning empty map", file=sys.stderr)
         return {

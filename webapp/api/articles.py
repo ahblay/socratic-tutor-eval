@@ -92,10 +92,17 @@ async def resolve_article(
     # Kick off domain map generation in background if needed (uses user's API key)
     if article.domain_map_status != "ready":
         article.domain_map_status = "pending"
+        # Build compact input: lead paragraph + section headings only.
+        # Full prose is not needed for concept extraction and is expensive to process.
+        lead = wiki.sections[0].text if wiki.sections else wiki.summary or ""
+        headings = [s.title for s in wiki.sections if s.title]
+        compact_text = lead
+        if headings:
+            compact_text += "\n\nSection headings:\n" + "\n".join(f"- {h}" for h in headings)
         background_tasks.add_task(
             _compute_domain_map_bg,
             article_id=article.id,
-            article_text=wiki.full_text,
+            article_text=compact_text,
             api_key=api_key,
         )
 
@@ -154,7 +161,7 @@ async def featured_article(
     async with httpx.AsyncClient(timeout=10.0) as client:
         r = await client.get(
             f"{config.WIKIPEDIA_API_BASE}/feed/featured/{today}",
-            headers={"User-Agent": "SocraticTutorBot/1.0"},
+            headers={"User-Agent": "SocraticTutorBot/1.0 (https://github.com/ahblay/socratic-tutor-eval)"},
         )
         r.raise_for_status()
         data = r.json()

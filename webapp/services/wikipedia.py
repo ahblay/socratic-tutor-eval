@@ -15,6 +15,9 @@ from bs4 import BeautifulSoup
 
 from webapp import config
 
+# Wikipedia requires a descriptive User-Agent with contact info (see API:Etiquette)
+_USER_AGENT = "SocraticTutorBot/1.0 (https://github.com/ahblay/socratic-tutor-eval)"
+
 
 @dataclass
 class WikiSection:
@@ -91,7 +94,7 @@ def _extract_title(url_or_title: str) -> str:
 
 async def _fetch_summary(client: httpx.AsyncClient, title: str) -> dict:
     url = f"{config.WIKIPEDIA_API_BASE}/page/summary/{_encode_title(title)}"
-    resp = client.build_request("GET", url, headers={"User-Agent": "SocraticTutorBot/1.0"})
+    resp = client.build_request("GET", url, headers={"User-Agent": _USER_AGENT})
     r = await client.send(resp)
     r.raise_for_status()
     data = r.json()
@@ -104,39 +107,53 @@ async def _fetch_summary(client: httpx.AsyncClient, title: str) -> dict:
 
 
 async def _fetch_sections(client: httpx.AsyncClient, title: str) -> list[WikiSection]:
-    url = f"{config.WIKIPEDIA_API_BASE}/page/mobile-sections/{_encode_title(title)}"
-    resp = client.build_request("GET", url, headers={"User-Agent": "SocraticTutorBot/1.0"})
+    """Fetch plain-text article content via the MediaWiki Action API (extracts module)."""
+    params = {
+        "action": "query",
+        "prop": "extracts",
+        "titles": title,
+        "explaintext": "1",
+        "exsectionformat": "wiki",  # section headers as == Title ==
+        "redirects": "1",
+        "format": "json",
+    }
+    resp = client.build_request(
+        "GET", "https://en.wikipedia.org/w/api.php",
+        params=params,
+        headers={"User-Agent": _USER_AGENT},
+    )
     r = await client.send(resp)
     r.raise_for_status()
-    data = r.json()
 
+    pages = r.json().get("query", {}).get("pages", {})
+    extract = next(iter(pages.values()), {}).get("extract", "")
+    if not extract:
+        return []
+
+    # Parse == Title == / === Title === markers into WikiSection objects
     sections: list[WikiSection] = []
+    current_title = ""
+    current_level = 0
+    current_lines: list[str] = []
 
-    # Lead section (no title)
-    lead = data.get("lead", {})
-    lead_html = " ".join(
-        p.get("text", "") for p in lead.get("sections", [{}])[0].get("content", [])
-        if isinstance(p, dict) and p.get("type") == "p"
-    )
-    if lead_html:
-        sections.append(WikiSection(title="", level=0, text=_strip_html(lead_html)))
+    def _flush():
+        text = " ".join(current_lines).strip()
+        if text:
+            sections.append(WikiSection(title=current_title, level=current_level, text=text))
 
-    # Remaining sections
-    for sec in data.get("remaining", {}).get("sections", []):
-        title_text = sec.get("line", "")
-        level = sec.get("toclevel", 1)
-        content_parts = []
-        for block in sec.get("content", []):
-            if isinstance(block, dict) and block.get("type") in ("p", "li"):
-                content_parts.append(block.get("text", ""))
-        plain = _strip_html(" ".join(content_parts))
-        if plain:
-            sections.append(WikiSection(
-                title=_strip_html(title_text),
-                level=level,
-                text=plain,
-            ))
+    for line in extract.split("\n"):
+        m = re.match(r"^(={2,5})\s*(.+?)\s*\1\s*$", line)
+        if m:
+            _flush()
+            current_title = m.group(2)
+            current_level = len(m.group(1)) - 1  # == → 1, === → 2, …
+            current_lines = []
+        else:
+            stripped = line.strip()
+            if stripped:
+                current_lines.append(stripped)
 
+    _flush()
     return sections
 
 

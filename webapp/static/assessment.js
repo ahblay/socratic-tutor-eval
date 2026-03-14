@@ -79,6 +79,18 @@ const Assessment = (() => {
     }
 
     Chat.appendBubble("system", "Assessment complete. Starting your session.");
+
+    // Fetch the tutor's opening question before unlocking the input bar
+    Chat.showThinking();
+    try {
+      const openData = await apiFetch(`/api/sessions/${sessionId}/open`, { method: "POST" });
+      Chat.hideThinking();
+      Chat.appendBubble("tutor", openData.reply);
+    } catch (e) {
+      Chat.hideThinking();
+      Chat.appendBubble("system", `Could not load opening question: ${e.message}`);
+    }
+
     App.startTutoring();
   }
 

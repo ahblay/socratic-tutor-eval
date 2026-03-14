@@ -106,21 +106,33 @@ MOCK_SUMMARY = {
     },
 }
 
-MOCK_SECTIONS = {
-    "lead": {
-        "sections": [
-            {"content": [{"type": "p", "text": "<p>Intro paragraph.</p>"}]}
-        ]
-    },
-    "remaining": {
-        "sections": [
-            {
-                "line": "<b>Structure</b>",
-                "toclevel": 1,
-                "content": [{"type": "p", "text": "<p>The double helix.</p>"}],
+MOCK_EXTRACTS_DNA = {
+    "query": {
+        "pages": {
+            "5417747": {
+                "pageid": 5417747,
+                "title": "DNA",
+                "extract": (
+                    "Intro paragraph.\n"
+                    "\n"
+                    "== Structure ==\n"
+                    "The double helix.\n"
+                ),
             }
-        ]
-    },
+        }
+    }
+}
+
+MOCK_EXTRACTS_FRACTIONS = {
+    "query": {
+        "pages": {
+            "999": {
+                "pageid": 999,
+                "title": "Fractions",
+                "extract": "A fraction represents part of a whole.\n",
+            }
+        }
+    }
 }
 
 
@@ -130,8 +142,8 @@ async def test_fetch_article_url():
     respx.get("https://en.wikipedia.org/api/rest_v1/page/summary/DNA").mock(
         return_value=httpx.Response(200, json=MOCK_SUMMARY)
     )
-    respx.get("https://en.wikipedia.org/api/rest_v1/page/mobile-sections/DNA").mock(
-        return_value=httpx.Response(200, json=MOCK_SECTIONS)
+    respx.get("https://en.wikipedia.org/w/api.php").mock(
+        return_value=httpx.Response(200, json=MOCK_EXTRACTS_DNA)
     )
 
     article = await fetch_article("https://en.wikipedia.org/wiki/DNA")
@@ -148,8 +160,8 @@ async def test_fetch_article_plain_title():
     respx.get("https://en.wikipedia.org/api/rest_v1/page/summary/Fractions").mock(
         return_value=httpx.Response(200, json={**MOCK_SUMMARY, "title": "Fractions", "pageid": 999})
     )
-    respx.get("https://en.wikipedia.org/api/rest_v1/page/mobile-sections/Fractions").mock(
-        return_value=httpx.Response(200, json=MOCK_SECTIONS)
+    respx.get("https://en.wikipedia.org/w/api.php").mock(
+        return_value=httpx.Response(200, json=MOCK_EXTRACTS_FRACTIONS)
     )
 
     article = await fetch_article("Fractions")

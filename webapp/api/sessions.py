@@ -93,6 +93,80 @@ async def get_session(
     return _session_response(session)
 
 
+@router.post("/{session_id}/open", response_model=TurnResponse)
+async def open_session(
+    session_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Generate and persist the tutor's opening question (no student turn).
+    Called once immediately after assessment completes. Idempotent.
+    """
+    from tutor_eval.tutors.socratic import SocraticTutor
+
+    session = await _get_session_or_404(session_id, user.id, db)
+    if session.status != "active":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Session is not active (status: {session.status})",
+        )
+
+    # Idempotent: return existing opener if turns already exist
+    turns_result = await db.execute(
+        select(Turn).where(Turn.session_id == session_id).order_by(Turn.turn_number)
+    )
+    existing_turns = turns_result.scalars().all()
+    if existing_turns:
+        first_tutor = next((t for t in existing_turns if t.role == "tutor"), None)
+        if first_tutor:
+            return TurnResponse(reply=first_tutor.content, turn_number=session.turn_count)
+
+    user_api_key: str | None = request.headers.get("X-API-Key") or None
+    if not user_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Anthropic API key required. Send your key in the X-API-Key header.",
+        )
+
+    article_result = await db.execute(
+        select(Article).where(Article.id == session.article_id)
+    )
+    article = article_result.scalar_one()
+
+    tutor = SocraticTutor(
+        topic=article.canonical_title,
+        domain_map=article.domain_map,
+        state=session.tutor_state_snapshot,
+        api_key=user_api_key,
+    )
+
+    # Empty student message + empty history → tutor introduces topic and asks first question
+    reply = await asyncio.to_thread(tutor.respond, "", [])
+
+    raw_reply = tutor._last_raw_response or reply
+    tutor_state = tutor.session_state()
+    usage = tutor._last_usage or {}
+
+    db.add(Turn(
+        session_id=session_id,
+        turn_number=1,
+        role="tutor",
+        content=reply,
+        raw_content=raw_reply,
+        tutor_state_snapshot=tutor_state,
+    ))
+
+    session.tutor_state_snapshot = tutor_state
+    session.total_input_tokens += usage.get("input_tokens", 0)
+    session.total_output_tokens += usage.get("output_tokens", 0)
+    # turn_count tracks student-initiated exchanges; opener does not consume a turn slot
+
+    await db.commit()
+    return TurnResponse(reply=reply, turn_number=session.turn_count)
+
+
 @router.post("/{session_id}/turn", response_model=TurnResponse)
 async def post_turn(
     session_id: str,
