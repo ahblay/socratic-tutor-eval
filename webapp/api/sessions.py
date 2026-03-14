@@ -151,11 +151,15 @@ async def post_turn(
     # Append the current student message
     history.append({"role": "student", "text": body.message})
 
+    # Extract user-supplied API key (BYOK); falls back to server env var if absent
+    user_api_key: str | None = request.headers.get("X-API-Key") or None
+
     # Reconstruct the tutor from saved state (None = fresh start)
     tutor = SocraticTutor(
         topic=article.canonical_title,
         domain_map=article.domain_map,
         state=session.tutor_state_snapshot,
+        api_key=user_api_key,
     )
 
     # Call respond() in a thread pool (sync Anthropic SDK)

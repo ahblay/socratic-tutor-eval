@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import anthropic
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -168,7 +169,12 @@ async def answer_question(
     if current_row is None:
         raise HTTPException(status_code=409, detail="No open question to answer")
 
-    client = request.app.state.anthropic_client
+    user_api_key: str | None = request.headers.get("X-API-Key") or None
+    client = (
+        anthropic.AsyncAnthropic(api_key=user_api_key)
+        if user_api_key
+        else request.app.state.anthropic_client
+    )
 
     # Classify the student's answer
     if current_row.question_index == 0:

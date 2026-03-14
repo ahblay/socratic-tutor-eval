@@ -365,11 +365,12 @@ class SocraticTutor(AbstractTutor):
         domain_map: dict,
         model: str = "claude-sonnet-4-6",
         state: dict | None = None,
+        api_key: str | None = None,
     ) -> None:
         self.topic = topic
         self.domain_map = domain_map
         self.model = model
-        self.client = anthropic.Anthropic()
+        self.client = anthropic.Anthropic(api_key=api_key or None)
 
         self._last_raw_response: str | None = None
         self._last_usage: dict | None = None  # {"input_tokens": int, "output_tokens": int}

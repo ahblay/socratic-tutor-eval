@@ -154,4 +154,4 @@ POST /api/export/{id}/analyze       → run post-hoc evaluation
 - `sessions.total_output_tokens` (Integer, default 0) — accumulated from API responses
 - `users.consented_at` (DateTime, nullable) — timestamp of data collection consent
 
-**BYOK wiring gap**: The `X-API-Key` header is forwarded by the frontend on every request, but `post_turn` currently uses the server's env-var `ANTHROPIC_API_KEY` to instantiate `SocraticTutor`. Domain map generation intentionally uses the server key (shared resource). Fix is tracked in Phase 5.1.
+**BYOK wiring (implemented)**: `post_turn` extracts `X-API-Key` and passes it to `SocraticTutor(api_key=...)`. Assessment `answer_question` constructs a per-request `AsyncAnthropic(api_key=...)` if the header is present. Domain map generation uses the server key exclusively (shared cached resource).

@@ -94,8 +94,12 @@ Single-page web UI (plain HTML/CSS/JS, no build step, no framework).
 - HTTP 402 response when turn budget exhausted
 - Turn budget enforcement + token accumulation in `post_turn`
 
-**Known gap (Phase 5 → Phase 5.1):**
-- `X-API-Key` is sent by the frontend and included in `apiFetch` headers, but the backend `post_turn` route does not yet extract it and pass it to `SocraticTutor`. The tutor currently uses the server's `ANTHROPIC_API_KEY`. Fix: (1) add `api_key` param to `SocraticTutor.__init__`, (2) extract `request.headers.get("X-API-Key")` in `post_turn`, (3) same for assessment Haiku calls. Domain map generation deliberately uses the server's key (shared cached resource).
+**BYOK wiring (Phase 5.1) ✅:**
+- `post_turn` extracts `X-API-Key` header and passes it to `SocraticTutor(api_key=...)`.
+- `answer_question` constructs a per-request `AsyncAnthropic(api_key=...)` client for assessment classification.
+- `SocraticTutor.__init__` accepts `api_key: str | None`; falls back to server env var if `None`.
+- Domain map generation deliberately uses the server's key (shared cached resource).
+- Server must have `ANTHROPIC_API_KEY` set for domain map generation (documented in `config.py`).
 
 ### Phase 6 — Knowledge Map ⬜
 Visual representation of student's current KC mastery across the domain map graph.
