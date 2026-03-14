@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,13 +54,22 @@ def _get_client(request):
 @router.post("/resolve", response_model=ArticleResponse)
 async def resolve_article(
     body: ResolveRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """
     Accept a Wikipedia URL or title, fetch metadata, and trigger domain map
     generation as a background task if not already cached.
+    Domain map generation uses the user's own API key (BYOK).
     """
+    api_key: str | None = request.headers.get("X-API-Key") or None
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Anthropic API key required. Send your key in the X-API-Key header.",
+        )
+
     wiki = await fetch_article(body.url)
 
     # Upsert article row
@@ -80,13 +89,14 @@ async def resolve_article(
         db.add(article)
         await db.flush()
 
-    # Kick off domain map generation in background if needed
+    # Kick off domain map generation in background if needed (uses user's API key)
     if article.domain_map_status != "ready":
         article.domain_map_status = "pending"
         background_tasks.add_task(
             _compute_domain_map_bg,
             article_id=article.id,
             article_text=wiki.full_text,
+            api_key=api_key,
         )
 
     await db.commit()
@@ -132,6 +142,7 @@ async def get_article(
 
 @router.get("/featured/today")
 async def featured_article(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
@@ -154,7 +165,7 @@ async def featured_article(
         raise HTTPException(status_code=503, detail="Featured article not available")
 
     return await resolve_article(
-        ResolveRequest(url=url), background_tasks=background_tasks, db=db
+        ResolveRequest(url=url), request=request, background_tasks=background_tasks, db=db
     )
 
 
@@ -162,13 +173,14 @@ async def featured_article(
 # Background task
 # ---------------------------------------------------------------------------
 
-async def _compute_domain_map_bg(article_id: str, article_text: str) -> None:
-    """Run domain map generation in the background and persist the result."""
+async def _compute_domain_map_bg(article_id: str, article_text: str, api_key: str) -> None:
+    """Run domain map generation in the background and persist the result.
+    Uses the user's own API key (BYOK) — no server key involved.
+    """
     import anthropic as _anthropic
-    from webapp import config
     from webapp.db import AsyncSessionLocal
 
-    client = _anthropic.AsyncAnthropic(api_key=config.ANTHROPIC_API_KEY or None)
+    client = _anthropic.AsyncAnthropic(api_key=api_key)
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Article).where(Article.id == article_id))

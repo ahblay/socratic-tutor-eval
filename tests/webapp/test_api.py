@@ -66,6 +66,10 @@ async def client():
 # Helpers
 # ---------------------------------------------------------------------------
 
+# Dummy key used in all requests that require X-API-Key
+TEST_API_KEY = "sk-ant-test-key"
+
+
 async def _register(client, email="u@test.com", password="pw") -> str:
     r = await client.post("/api/auth/register", json={"email": email, "password": password, "consented": True})
     return r.json()["access_token"]
@@ -88,7 +92,11 @@ async def _resolve_article(client, page_id=12345, title="DNA", mark_ready=True):
     # Patch out the background domain map task — tested separately
     with patch("webapp.api.articles.fetch_article", return_value=mock_article), \
          patch("webapp.api.articles._compute_domain_map_bg", new_callable=AsyncMock):
-        r = await client.post("/api/articles/resolve", json={"url": f"https://en.wikipedia.org/wiki/{title}"})
+        r = await client.post(
+            "/api/articles/resolve",
+            json={"url": f"https://en.wikipedia.org/wiki/{title}"},
+            headers={"X-API-Key": TEST_API_KEY},
+        )
     assert r.status_code == 200
     article_id = r.json()["article_id"]
 
@@ -182,7 +190,11 @@ class TestArticles:
                            summary="A fraction is...", sections=[])
         with patch("webapp.api.articles.fetch_article", return_value=mock), \
              patch("webapp.api.articles._compute_domain_map_bg", new_callable=AsyncMock):
-            r = await client.post("/api/articles/resolve", json={"url": "https://en.wikipedia.org/wiki/Fractions"})
+            r = await client.post(
+                "/api/articles/resolve",
+                json={"url": "https://en.wikipedia.org/wiki/Fractions"},
+                headers={"X-API-Key": TEST_API_KEY},
+            )
         assert r.json()["title"] == "Fractions"
 
     async def test_resolve_same_page_id_twice_returns_same_id(self, client):
@@ -331,7 +343,7 @@ class TestTurnHotPath:
         r = await client.post(
             f"/api/sessions/{session_id}/turn",
             json={"message": "Hello"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
         )
         assert r.status_code == 409
 
@@ -344,7 +356,7 @@ class TestTurnHotPath:
             r = await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "I think DNA is made of cells."},
-                headers={"Authorization": f"Bearer {token}"},
+                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
             )
         assert r.status_code == 200
         assert r.json()["reply"] == "What do you think?"
@@ -359,7 +371,7 @@ class TestTurnHotPath:
             await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "DNA is a molecule."},
-                headers={"Authorization": f"Bearer {token}"},
+                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
             )
 
         r = await client.get(
@@ -381,12 +393,12 @@ class TestTurnHotPath:
             await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "First message."},
-                headers={"Authorization": f"Bearer {token}"},
+                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
             )
             await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "Second message."},
-                headers={"Authorization": f"Bearer {token}"},
+                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
             )
 
         r = await client.get(
@@ -409,7 +421,7 @@ class TestTurnHotPath:
             r = await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "Hello?"},
-                headers={"Authorization": f"Bearer {token}"},
+                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
             )
         assert r.status_code == 409
 
@@ -463,7 +475,11 @@ async def _resolve_rich_article(client) -> str:
     )
     with patch("webapp.api.articles.fetch_article", return_value=mock_article), \
          patch("webapp.api.articles._compute_domain_map_bg", new_callable=AsyncMock):
-        r = await client.post("/api/articles/resolve", json={"url": "https://en.wikipedia.org/wiki/DNA"})
+        r = await client.post(
+            "/api/articles/resolve",
+            json={"url": "https://en.wikipedia.org/wiki/DNA"},
+            headers={"X-API-Key": TEST_API_KEY},
+        )
     article_id = r.json()["article_id"]
 
     async with TestSessionLocal() as db:
@@ -493,7 +509,7 @@ async def _answer(client, token, session_id, answer: str, mock_class: str = "par
         r = await client.post(
             f"/api/sessions/{session_id}/assessment/answer",
             json={"answer": answer},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
         )
     return r
 

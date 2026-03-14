@@ -19,10 +19,9 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 # Required
 # ---------------------------------------------------------------------------
 
-# Server-side key — used ONLY for domain map generation (shared cached resource).
-# All per-user tutoring and assessment calls use the X-API-Key header from the
-# client (BYOK). If X-API-Key is absent, those calls fall back to this key.
-# Set via: export ANTHROPIC_API_KEY=sk-ant-... (or .env file).
+# Not used at runtime — all API calls (tutoring, assessment, domain map generation)
+# use the X-API-Key header supplied by the client (BYOK). Requests without a key
+# are rejected with HTTP 400. Can be left unset.
 ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # ---------------------------------------------------------------------------
