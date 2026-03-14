@@ -45,7 +45,7 @@ async function apiFetch(path, options = {}) {
 
   if (resp.status === 401) {
     Auth.clearToken();
-    App.transition("auth");
+    window.location.href = "/";   // full reload re-wires all event listeners
     throw new Error("Session expired — please sign in again");
   }
 
@@ -297,6 +297,14 @@ const App = (() => {
 
     document.getElementById("btn-logout2").addEventListener("click", Auth.logout);
     document.getElementById("btn-end-session").addEventListener("click", _endSession);
+
+    // Enter submits; Shift+Enter inserts newline
+    document.getElementById("inp-chat").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById("form-chat").requestSubmit();
+      }
+    });
 
     // Start assessment loop; it calls App.startTutoring() when done
     Chat.lockInput();

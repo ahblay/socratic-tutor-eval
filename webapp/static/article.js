@@ -57,7 +57,9 @@ const Article = (() => {
 
   function renderCard(data) {
     document.getElementById("article-title").textContent   = data.title || data.canonical_title || "";
-    document.getElementById("article-summary").textContent = data.summary || "";
+    const summary = data.summary || "";
+    document.getElementById("article-summary").textContent =
+      summary.length > 300 ? summary.slice(0, 300) + "…" : summary;
     document.getElementById("article-kc-count").textContent =
       data.kc_count ? `${data.kc_count} knowledge concepts identified` : "";
     document.getElementById("btn-start-session").disabled = !data.kc_count;
