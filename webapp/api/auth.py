@@ -36,6 +36,7 @@ ALGORITHM = "HS256"
 class RegisterRequest(BaseModel):
     email: str
     password: str
+    consented: bool = False  # must be True to register
 
 
 class TokenResponse(BaseModel):
@@ -108,6 +109,11 @@ async def get_optional_user(
 
 @router.post("/register", response_model=TokenResponse)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    if not body.consented:
+        raise HTTPException(
+            status_code=400,
+            detail="Consent to data collection is required to register",
+        )
     result = await db.execute(select(User).where(User.email == body.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -116,6 +122,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
         email=body.email,
         hashed_password=pwd_context.hash(body.password),
         is_anonymous=False,
+        consented_at=datetime.now(timezone.utc),
     )
     db.add(user)
     await db.commit()

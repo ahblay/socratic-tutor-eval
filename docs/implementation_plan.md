@@ -62,7 +62,7 @@ Brief protocol at session start to initialize BKT L0 values for human students.
 - `POST /api/sessions/{id}/assessment/answer` — Haiku classification, creates next question row or signals `assessment_complete`
 - `POST /api/sessions/{id}/assessment/complete` — 4-phase L0 propagation, upserts BKTStateRows, transitions session to `active`
 
-### Phase 5 — Frontend ⬜
+### Phase 5 — Frontend ✅
 Single-page web UI (plain HTML/CSS/JS, no build step, no framework).
 
 **Files:**
@@ -77,23 +77,25 @@ Single-page web UI (plain HTML/CSS/JS, no build step, no framework).
 **State machine phases:** `auth` → `article` → `chat (assessment)` → `chat (tutoring)` → `ended`
 
 **Auth flow:**
-- First visit: auto-create anonymous user (no login screen shown)
-- Optional sign-in/register for returning users
+- First visit: option to continue anonymously or sign in / register
 - Consent checkbox (not pre-checked) required at registration: "Conversation transcripts are collected to evaluate tutor performance."
 - JWT token + BYOK API key stored in `localStorage`
 
 **BYOK + turn budget UI:**
-- API key input field in settings/auth screen
+- API key input field on article selection screen
 - Turn limit input (default: 50) alongside API key
 - Remaining turns shown during session
 - HTTP 402 response → friendly "Budget reached" message
 
-**Backend additions needed before implementing:**
-- `GET /` route in `app.py` to serve `index.html`
-- `Session.max_turns`, `Session.total_input_tokens`, `Session.total_output_tokens` columns
-- `User.consented_at` column
-- `X-API-Key` header extraction in `post_turn` route
+**Backend additions implemented:**
+- `GET /` route in `app.py` serves `index.html` via Jinja2Templates
+- `Session.max_turns`, `Session.total_input_tokens`, `Session.total_output_tokens` columns added
+- `User.consented_at` column added
 - HTTP 402 response when turn budget exhausted
+- Turn budget enforcement + token accumulation in `post_turn`
+
+**Known gap (Phase 5 → Phase 5.1):**
+- `X-API-Key` is sent by the frontend and included in `apiFetch` headers, but the backend `post_turn` route does not yet extract it and pass it to `SocraticTutor`. The tutor currently uses the server's `ANTHROPIC_API_KEY`. Fix: (1) add `api_key` param to `SocraticTutor.__init__`, (2) extract `request.headers.get("X-API-Key")` in `post_turn`, (3) same for assessment Haiku calls. Domain map generation deliberately uses the server's key (shared cached resource).
 
 ### Phase 6 — Knowledge Map ⬜
 Visual representation of student's current KC mastery across the domain map graph.

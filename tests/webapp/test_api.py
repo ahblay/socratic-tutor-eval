@@ -67,7 +67,7 @@ async def client():
 # ---------------------------------------------------------------------------
 
 async def _register(client, email="u@test.com", password="pw") -> str:
-    r = await client.post("/api/auth/register", json={"email": email, "password": password})
+    r = await client.post("/api/auth/register", json={"email": email, "password": password, "consented": True})
     return r.json()["access_token"]
 
 
@@ -139,25 +139,25 @@ class TestAuth:
 
     async def test_register(self, client):
         r = await client.post("/api/auth/register", json={
-            "email": "test@example.com", "password": "password123"
+            "email": "test@example.com", "password": "password123", "consented": True
         })
         assert r.status_code == 200
         assert "access_token" in r.json()
 
     async def test_register_duplicate_email(self, client):
-        payload = {"email": "dup@example.com", "password": "pw"}
+        payload = {"email": "dup@example.com", "password": "pw", "consented": True}
         await client.post("/api/auth/register", json=payload)
         r = await client.post("/api/auth/register", json=payload)
         assert r.status_code == 400
 
     async def test_login(self, client):
-        await client.post("/api/auth/register", json={"email": "login@example.com", "password": "pw123"})
+        await client.post("/api/auth/register", json={"email": "login@example.com", "password": "pw123", "consented": True})
         r = await client.post("/api/auth/login", data={"username": "login@example.com", "password": "pw123"})
         assert r.status_code == 200
         assert "access_token" in r.json()
 
     async def test_login_wrong_password(self, client):
-        await client.post("/api/auth/register", json={"email": "bad@example.com", "password": "correct"})
+        await client.post("/api/auth/register", json={"email": "bad@example.com", "password": "correct", "consented": True})
         r = await client.post("/api/auth/login", data={"username": "bad@example.com", "password": "wrong"})
         assert r.status_code == 400
 

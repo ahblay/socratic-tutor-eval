@@ -148,8 +148,10 @@ POST /api/export/{id}/analyze       → run post-hoc evaluation
 | `assessments` | pre-session assessment Q&A, initial L0 estimates |
 | `retention_schedule` | spaced repetition scheduling (future) |
 
-**Pending schema additions** (needed before Phase 5 implementation):
+**Implemented schema additions (Phase 5):**
 - `sessions.max_turns` (Integer) — turn budget set at session creation
 - `sessions.total_input_tokens` (Integer, default 0) — accumulated from API responses
 - `sessions.total_output_tokens` (Integer, default 0) — accumulated from API responses
 - `users.consented_at` (DateTime, nullable) — timestamp of data collection consent
+
+**BYOK wiring gap**: The `X-API-Key` header is forwarded by the frontend on every request, but `post_turn` currently uses the server's env-var `ANTHROPIC_API_KEY` to instantiate `SocraticTutor`. Domain map generation intentionally uses the server key (shared resource). Fix is tracked in Phase 5.1.

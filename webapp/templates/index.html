@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Socratic Tutor</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── AUTH ── -->
+  <section id="phase-auth" class="phase">
+    <div class="card">
+      <h1>Socratic Tutor</h1>
+      <p class="subtitle">Learn any Wikipedia topic through guided questions.</p>
+
+      <div id="auth-anon-bar">
+        <button id="btn-continue-anon" class="btn-primary">Continue anonymously</button>
+        <div class="or-divider"><span>or</span></div>
+        <button id="btn-show-login" class="btn-link">Sign in / Register</button>
+      </div>
+
+      <form id="form-login" class="auth-form hidden">
+        <input id="inp-email" type="email" placeholder="Email" autocomplete="email">
+        <input id="inp-password" type="password" placeholder="Password" autocomplete="current-password">
+        <p id="login-error" class="error-msg hidden"></p>
+        <div class="form-row">
+          <button type="submit" class="btn-primary">Sign in</button>
+          <button type="button" id="btn-show-register" class="btn-link">Create account</button>
+        </div>
+      </form>
+
+      <form id="form-register" class="auth-form hidden">
+        <input id="inp-reg-email" type="email" placeholder="Email" autocomplete="email">
+        <input id="inp-reg-password" type="password" placeholder="Password" autocomplete="new-password">
+        <label class="consent-label">
+          <input id="chk-consent" type="checkbox">
+          <span>I agree that conversation transcripts may be collected and used to evaluate tutor performance. No personally identifiable information is shared with third parties.</span>
+        </label>
+        <p id="register-error" class="error-msg hidden"></p>
+        <div class="form-row">
+          <button type="submit" class="btn-primary">Create account</button>
+          <button type="button" id="btn-show-login-back" class="btn-link">Back to sign in</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ── ARTICLE INPUT ── -->
+  <section id="phase-article" class="phase hidden">
+    <header class="top-bar">
+      <span class="brand">Socratic Tutor</span>
+      <button id="btn-logout" class="btn-link small">Sign out</button>
+    </header>
+    <div class="card">
+      <h2>Choose an article</h2>
+      <p class="hint">Paste a Wikipedia URL or article title.</p>
+      <form id="form-article">
+        <input id="inp-url" type="text"
+               placeholder="https://en.wikipedia.org/wiki/..."
+               autocomplete="off" spellcheck="false">
+        <div class="form-row">
+          <input id="inp-api-key" type="password"
+                 placeholder="Anthropic API key (sk-ant-...)"
+                 autocomplete="off" spellcheck="false">
+          <input id="inp-max-turns" type="number"
+                 placeholder="Max turns" value="50" min="1" max="500"
+                 style="width: 110px;">
+        </div>
+        <p class="hint small">Your API key is never stored on the server.</p>
+        <button type="submit" id="btn-resolve" class="btn-primary">Analyse article →</button>
+      </form>
+      <p id="article-error" class="error-msg hidden"></p>
+
+      <div id="article-polling" class="hidden">
+        <div class="spinner"></div>
+        <p class="polling-msg">Analysing article<span class="dots"></span></p>
+      </div>
+
+      <div id="article-card" class="article-card hidden">
+        <h3 id="article-title"></h3>
+        <p id="article-summary" class="summary-text"></p>
+        <p id="article-kc-count" class="meta"></p>
+        <button id="btn-start-session" class="btn-primary">Begin session →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CHAT (assessment + tutoring share this shell) ── -->
+  <section id="phase-chat" class="phase hidden">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <span class="brand">Socratic Tutor</span>
+        <span id="chat-topic" class="topic-chip"></span>
+      </div>
+      <div class="top-bar-right">
+        <span id="phase-badge" class="phase-badge">Assessment</span>
+        <span id="turns-remaining" class="turns-chip hidden"></span>
+        <button id="btn-end-session" class="btn-link small hidden">End session</button>
+        <button id="btn-logout2" class="btn-link small">Sign out</button>
+      </div>
+    </header>
+
+    <div id="chat-messages" role="log" aria-live="polite"></div>
+
+    <div id="thinking" class="thinking-bar hidden">
+      <span class="dot-pulse"><span></span><span></span><span></span></span>
+      <span>Thinking…</span>
+    </div>
+
+    <form id="form-chat" class="chat-input-bar">
+      <textarea id="inp-chat"
+                placeholder="Type your answer…"
+                rows="2"
+                aria-label="Your message"></textarea>
+      <button type="submit" id="btn-send" class="btn-primary">Send</button>
+    </form>
+  </section>
+
+  <!-- ── ENDED ── -->
+  <section id="phase-ended" class="phase hidden">
+    <div class="card">
+      <h2>Session complete</h2>
+      <p id="ended-summary" class="subtitle"></p>
+      <button id="btn-new-article" class="btn-primary">Start another article →</button>
+    </div>
+  </section>
+
+  <!-- ── ERROR OVERLAY ── -->
+  <div id="error-overlay" class="overlay hidden">
+    <div class="overlay-box">
+      <p id="overlay-msg"></p>
+      <button id="btn-overlay-dismiss" class="btn-primary">OK</button>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<script src="/static/auth.js"></script>
+<script src="/static/article.js"></script>
+<script src="/static/assessment.js"></script>
+<script src="/static/chat.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

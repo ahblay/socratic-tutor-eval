@@ -48,6 +48,8 @@ class User(Base):
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # Timestamp of explicit data-collection consent (required for registered users)
+    consented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     sessions: Mapped[list[Session]] = relationship("Session", back_populates="user")
     bkt_states: Mapped[list[BKTStateRow]] = relationship("BKTStateRow", back_populates="user")
@@ -102,6 +104,11 @@ class Session(Base):
     analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # "pending" | "running" | "ready" | None
     analysis_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    # BYOK turn budget — set at session creation, enforced per turn
+    max_turns: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Accumulated token usage from Anthropic API responses
+    total_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_output_tokens: Mapped[int] = mapped_column(Integer, default=0)
 
     user: Mapped[User] = relationship("User", back_populates="sessions")
     article: Mapped[Article] = relationship("Article", back_populates="sessions")

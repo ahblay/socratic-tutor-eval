@@ -27,6 +27,7 @@ router = APIRouter()
 
 class CreateSessionRequest(BaseModel):
     article_id: str
+    max_turns: int = 50  # BYOK turn budget; None = unlimited
 
 
 class SessionResponse(BaseModel):
@@ -34,6 +35,8 @@ class SessionResponse(BaseModel):
     article_id: str
     status: str
     turn_count: int
+    max_turns: int | None
+    turns_remaining: int | None  # None if no budget set
 
 
 class TurnRequest(BaseModel):
@@ -71,17 +74,13 @@ async def create_session(
         user_id=user.id,
         article_id=article.id,
         status="pre_assessment",
+        max_turns=body.max_turns,
     )
     db.add(session)
     await db.commit()
     await db.refresh(session)
 
-    return SessionResponse(
-        session_id=session.id,
-        article_id=session.article_id,
-        status=session.status,
-        turn_count=session.turn_count,
-    )
+    return _session_response(session)
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -91,12 +90,7 @@ async def get_session(
     user: User = Depends(get_current_user),
 ):
     session = await _get_session_or_404(session_id, user.id, db)
-    return SessionResponse(
-        session_id=session.id,
-        article_id=session.article_id,
-        status=session.status,
-        turn_count=session.turn_count,
-    )
+    return _session_response(session)
 
 
 @router.post("/{session_id}/turn", response_model=TurnResponse)
@@ -122,6 +116,13 @@ async def post_turn(
         raise HTTPException(
             status_code=409,
             detail=f"Session is not active (status: {session.status})",
+        )
+
+    # Enforce turn budget
+    if session.max_turns is not None and session.turn_count >= session.max_turns:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Turn budget exhausted ({session.max_turns} turns used)",
         )
 
     # Load the article for domain_map and topic
@@ -162,6 +163,7 @@ async def post_turn(
 
     raw_reply = tutor._last_raw_response or reply
     tutor_state = tutor.session_state()
+    usage = tutor._last_usage or {}
 
     # Next turn number (each exchange = 2 rows: user + tutor)
     next_turn_number = len(existing_turns) + 1
@@ -189,6 +191,8 @@ async def post_turn(
     # Update session
     session.turn_count += 1
     session.tutor_state_snapshot = tutor_state
+    session.total_input_tokens += usage.get("input_tokens", 0)
+    session.total_output_tokens += usage.get("output_tokens", 0)
 
     await db.commit()
 
@@ -239,6 +243,22 @@ async def get_transcript(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _session_response(session: Session) -> SessionResponse:
+    turns_remaining = (
+        session.max_turns - session.turn_count
+        if session.max_turns is not None
+        else None
+    )
+    return SessionResponse(
+        session_id=session.id,
+        article_id=session.article_id,
+        status=session.status,
+        turn_count=session.turn_count,
+        max_turns=session.max_turns,
+        turns_remaining=turns_remaining,
+    )
+
 
 async def _get_session_or_404(
     session_id: str, user_id: str, db: AsyncSession
