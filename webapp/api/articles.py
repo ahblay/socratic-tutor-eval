@@ -6,7 +6,6 @@ Article resolution and domain map management.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -14,8 +13,9 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from webapp.api.auth import get_current_user
 from webapp.db import get_db
-from webapp.db.models import Article
+from webapp.db.models import Article, User
 from webapp.services.domain_cache import build_kg_from_domain_map, get_or_create_domain_map
 from webapp.services.wikipedia import fetch_article
 
@@ -39,36 +39,53 @@ class ArticleResponse(BaseModel):
     kc_count: int
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _get_client(request):
-    return request.app.state.anthropic_client
+class CatalogArticleResponse(BaseModel):
+    article_id: str
+    title: str
+    summary: str
+    kc_count: int
 
 
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
+@router.get("", response_model=list[CatalogArticleResponse])
+async def list_published_articles(
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all published articles for the lesson catalog. No auth required."""
+    result = await db.execute(
+        select(Article)
+        .where(Article.is_published == True)
+        .order_by(Article.canonical_title)
+    )
+    articles = result.scalars().all()
+    return [
+        CatalogArticleResponse(
+            article_id=a.id,
+            title=a.canonical_title,
+            summary=a.summary or "",
+            kc_count=len(a.domain_map.get("core_concepts", [])) if a.domain_map else 0,
+        )
+        for a in articles
+    ]
+
+
 @router.post("/resolve", response_model=ArticleResponse)
 async def resolve_article(
     body: ResolveRequest,
-    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
     Accept a Wikipedia URL or title, fetch metadata, and trigger domain map
     generation as a background task if not already cached.
-    Domain map generation uses the user's own API key (BYOK).
+    Restricted to superusers — domain map generation uses the server API key.
     """
-    api_key: str | None = request.headers.get("X-API-Key") or None
-    if not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Anthropic API key required. Send your key in the X-API-Key header.",
-        )
+    if not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Superuser access required")
 
     wiki = await fetch_article(body.url)
 
@@ -89,11 +106,9 @@ async def resolve_article(
         db.add(article)
         await db.flush()
 
-    # Kick off domain map generation in background if needed (uses user's API key)
+    # Kick off domain map generation in background if needed
     if article.domain_map_status != "ready":
         article.domain_map_status = "pending"
-        # Build compact input: lead paragraph + section headings only.
-        # Full prose is not needed for concept extraction and is expensive to process.
         lead = wiki.sections[0].text if wiki.sections else wiki.summary or ""
         headings = [s.title for s in wiki.sections if s.title]
         compact_text = lead
@@ -103,7 +118,6 @@ async def resolve_article(
             _compute_domain_map_bg,
             article_id=article.id,
             article_text=compact_text,
-            api_key=api_key,
         )
 
     await db.commit()
@@ -120,6 +134,38 @@ async def resolve_article(
         summary=article.summary or "",
         domain_map_status=article.domain_map_status,
         kc_count=kc_count,
+    )
+
+
+@router.get("/featured/today")
+async def featured_article(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Resolve today's Wikipedia featured article. Superuser only."""
+    import httpx
+    from webapp import config
+
+    today = datetime.now(timezone.utc).strftime("%Y/%m/%d")
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(
+            f"{config.WIKIPEDIA_API_BASE}/feed/featured/{today}",
+            headers={"User-Agent": "SocraticTutorBot/1.0 (https://github.com/ahblay/socratic-tutor-eval)"},
+        )
+        r.raise_for_status()
+        data = r.json()
+
+    tfa = data.get("tfa", {})
+    url = tfa.get("content_urls", {}).get("desktop", {}).get("page", "")
+    if not url:
+        raise HTTPException(status_code=503, detail="Featured article not available")
+
+    return await resolve_article(
+        ResolveRequest(url=url),
+        background_tasks=background_tasks,
+        db=db,
+        user=user,
     )
 
 
@@ -147,47 +193,16 @@ async def get_article(
     )
 
 
-@router.get("/featured/today")
-async def featured_article(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
-):
-    """Resolve today's Wikipedia featured article."""
-    import httpx
-    from webapp import config
-
-    today = datetime.now(timezone.utc).strftime("%Y/%m/%d")
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        r = await client.get(
-            f"{config.WIKIPEDIA_API_BASE}/feed/featured/{today}",
-            headers={"User-Agent": "SocraticTutorBot/1.0 (https://github.com/ahblay/socratic-tutor-eval)"},
-        )
-        r.raise_for_status()
-        data = r.json()
-
-    tfa = data.get("tfa", {})
-    url = tfa.get("content_urls", {}).get("desktop", {}).get("page", "")
-    if not url:
-        raise HTTPException(status_code=503, detail="Featured article not available")
-
-    return await resolve_article(
-        ResolveRequest(url=url), request=request, background_tasks=background_tasks, db=db
-    )
-
-
 # ---------------------------------------------------------------------------
 # Background task
 # ---------------------------------------------------------------------------
 
-async def _compute_domain_map_bg(article_id: str, article_text: str, api_key: str) -> None:
-    """Run domain map generation in the background and persist the result.
-    Uses the user's own API key (BYOK) — no server key involved.
-    """
+async def _compute_domain_map_bg(article_id: str, article_text: str) -> None:
+    """Run domain map generation in the background using the server API key."""
     import anthropic as _anthropic
     from webapp.db import AsyncSessionLocal
 
-    client = _anthropic.AsyncAnthropic(api_key=api_key)
+    client = _anthropic.AsyncAnthropic()  # reads ANTHROPIC_API_KEY from env
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Article).where(Article.id == article_id))

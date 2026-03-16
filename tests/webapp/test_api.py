@@ -76,11 +76,19 @@ async def _register(client, email="u@test.com", password="pw") -> str:
 
 
 async def _register_superuser(client, email="admin@test.com", password="pw") -> str:
-    """Register a user and promote them to superuser directly in the DB."""
-    token = await _register(client, email, password)
-    user_id = (await client.post(
-        "/api/auth/login", data={"username": email, "password": password}
-    )).json()["user_id"]
+    """Register a user (or log in if already registered) and promote to superuser.
+
+    Idempotent: safe to call multiple times within the same test.
+    """
+    r = await client.post(
+        "/api/auth/register",
+        json={"email": email, "password": password, "consented": True},
+    )
+    if r.status_code == 400:  # email already registered
+        r = await client.post("/api/auth/login", data={"username": email, "password": password})
+    data = r.json()
+    token = data["access_token"]
+    user_id = data["user_id"]
     async with TestSessionLocal() as db:
         from sqlalchemy import select
         from webapp.db.models import User
@@ -100,13 +108,14 @@ async def _resolve_article(client, page_id=12345, title="DNA", mark_ready=True):
         summary="A polymer.",
         sections=[WikiSection(title="Intro", level=1, text="Some content.")],
     )
+    admin_token = await _register_superuser(client)
     # Patch out the background domain map task — tested separately
     with patch("webapp.api.articles.fetch_article", return_value=mock_article), \
          patch("webapp.api.articles._compute_domain_map_bg", new_callable=AsyncMock):
         r = await client.post(
             "/api/articles/resolve",
             json={"url": f"https://en.wikipedia.org/wiki/{title}"},
-            headers={"X-API-Key": TEST_API_KEY},
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
     assert r.status_code == 200
     article_id = r.json()["article_id"]
@@ -189,6 +198,7 @@ class TestArticles:
 
     async def test_resolve_returns_title(self, client):
         from webapp.services.wikipedia import WikiArticle
+        admin_token = await _register_superuser(client)
         mock = WikiArticle(page_id=1, canonical_title="Fractions",
                            wikipedia_url="https://en.wikipedia.org/wiki/Fractions",
                            summary="A fraction is...", sections=[])
@@ -197,9 +207,20 @@ class TestArticles:
             r = await client.post(
                 "/api/articles/resolve",
                 json={"url": "https://en.wikipedia.org/wiki/Fractions"},
-                headers={"X-API-Key": TEST_API_KEY},
+                headers={"Authorization": f"Bearer {admin_token}"},
             )
         assert r.json()["title"] == "Fractions"
+
+    async def test_resolve_requires_superuser(self, client):
+        token = await _register(client)
+        with patch("webapp.api.articles.fetch_article"), \
+             patch("webapp.api.articles._compute_domain_map_bg", new_callable=AsyncMock):
+            r = await client.post(
+                "/api/articles/resolve",
+                json={"url": "https://en.wikipedia.org/wiki/DNA"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert r.status_code == 403
 
     async def test_resolve_same_page_id_twice_returns_same_id(self, client):
         id1 = await _resolve_article(client, page_id=42, title="Same", mark_ready=False)
@@ -225,6 +246,42 @@ class TestArticles:
         article_id = await _resolve_article(client, mark_ready=True)
         r = await client.get(f"/api/articles/{article_id}")
         assert r.json()["kc_count"] == 1  # one concept in fixture domain map
+
+    async def test_catalog_empty_when_nothing_published(self, client):
+        await _resolve_article(client, mark_ready=True)  # resolved but not published
+        r = await client.get("/api/articles")
+        assert r.status_code == 200
+        assert r.json() == []
+
+    async def test_catalog_returns_published_articles(self, client):
+        admin_token = await _register_superuser(client)
+        article_id = await _resolve_article(client, mark_ready=True)
+        await client.post(
+            f"/api/admin/articles/{article_id}/publish",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        r = await client.get("/api/articles")
+        assert r.status_code == 200
+        assert len(r.json()) == 1
+        assert r.json()[0]["article_id"] == article_id
+
+    async def test_catalog_excludes_unpublished(self, client):
+        admin_token = await _register_superuser(client)
+        article_id = await _resolve_article(client, mark_ready=True)
+        await client.post(
+            f"/api/admin/articles/{article_id}/publish",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        await client.post(
+            f"/api/admin/articles/{article_id}/unpublish",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        r = await client.get("/api/articles")
+        assert r.json() == []
+
+    async def test_catalog_no_auth_required(self, client):
+        r = await client.get("/api/articles")
+        assert r.status_code == 200  # no Authorization header needed
 
 
 # ---------------------------------------------------------------------------
@@ -477,12 +534,13 @@ async def _resolve_rich_article(client) -> str:
         summary="DNA is a molecule.",
         sections=[WikiSection(title="Intro", level=1, text="Some content.")],
     )
+    admin_token = await _register_superuser(client)
     with patch("webapp.api.articles.fetch_article", return_value=mock_article), \
          patch("webapp.api.articles._compute_domain_map_bg", new_callable=AsyncMock):
         r = await client.post(
             "/api/articles/resolve",
             json={"url": "https://en.wikipedia.org/wiki/DNA"},
-            headers={"X-API-Key": TEST_API_KEY},
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
     article_id = r.json()["article_id"]
 
