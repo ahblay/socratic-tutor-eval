@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from webapp.api.auth import get_current_user
 from webapp.db import get_db
-from webapp.db.models import Article, Session, Turn, User
+from webapp.db.models import Article, Assessment, BKTStateRow, Session, Turn, User
 
 router = APIRouter()
 
@@ -70,10 +70,31 @@ async def create_session(
             detail=f"Domain map not ready (status: {article.domain_map_status})",
         )
 
+    # Resume existing non-completed session if one exists
+    existing_result = await db.execute(
+        select(Session).where(
+            Session.user_id == user.id,
+            Session.article_id == body.article_id,
+            Session.status.in_(["pre_assessment", "active"]),
+        ).order_by(Session.started_at.desc()).limit(1)
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing is not None:
+        return _session_response(existing)
+
+    # Skip assessment if BKT state already exists for this user+article
+    bkt_result = await db.execute(
+        select(BKTStateRow).where(
+            BKTStateRow.user_id == user.id,
+            BKTStateRow.article_id == body.article_id,
+        ).limit(1)
+    )
+    already_assessed = bkt_result.scalar_one_or_none() is not None
+
     session = Session(
         user_id=user.id,
         article_id=article.id,
-        status="pre_assessment",
+        status="active" if already_assessed else "pre_assessment",
         max_turns=body.max_turns,
     )
     db.add(session)
@@ -138,12 +159,17 @@ async def open_session(
     tutor = SocraticTutor(
         topic=article.canonical_title,
         domain_map=article.domain_map,
-        state=session.tutor_state_snapshot,
+        state=None,  # always fresh — no prior tutor state at session open
         api_key=user_api_key,
     )
 
-    # Empty student message + empty history → tutor introduces topic and asks first question
-    reply = await asyncio.to_thread(tutor.respond, "", [])
+    # Build history: assessment Q&A (context) + synthetic opener trigger.
+    # The synthetic entry is never stored; it ensures the API receives a user-final message.
+    assessment_hist = await _assessment_history(session_id, db)
+    opener_history = assessment_hist + [
+        {"role": "student", "text": "Please introduce the topic and ask your first Socratic question."}
+    ]
+    reply = await asyncio.to_thread(tutor.respond, "", opener_history)
 
     raw_reply = tutor._last_raw_response or reply
     tutor_state = tutor.session_state()
@@ -213,16 +239,16 @@ async def post_turn(
     )
     existing_turns = turns_result.scalars().all()
 
-    # Convert DB turns to tutor history format
-    history = [
+    # Build history: assessment Q&A prefix + tutoring turns + current message
+    assessment_hist = await _assessment_history(session_id, db)
+    tutoring_hist = [
         {
             "role": "student" if t.role == "user" else "tutor",
             "text": t.content,
         }
         for t in existing_turns
     ]
-
-    # Append the current student message
+    history = assessment_hist + tutoring_hist
     history.append({"role": "student", "text": body.message})
 
     # Extract user-supplied API key (BYOK); falls back to server env var if absent
@@ -351,3 +377,21 @@ async def _get_session_or_404(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
+
+
+async def _assessment_history(session_id: str, db: AsyncSession) -> list[dict]:
+    """Return assessment Q&A as tutor/student history entries, ordered by question index."""
+    result = await db.execute(
+        select(Assessment)
+        .where(
+            Assessment.session_id == session_id,
+            Assessment.user_answer.isnot(None),
+        )
+        .order_by(Assessment.question_index)
+    )
+    rows = result.scalars().all()
+    history = []
+    for row in rows:
+        history.append({"role": "tutor",   "text": row.question_text})
+        history.append({"role": "student", "text": row.user_answer})
+    return history

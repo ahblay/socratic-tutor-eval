@@ -47,6 +47,7 @@ const Assessment = (() => {
     // Assessment question/answer loop
     while (true) {
       Chat.appendBubble("tutor", resp.question_text);
+      Chat.unlockInput();
 
       const userText = await _waitForSubmit();
       Chat.appendBubble("user", userText);

@@ -6,7 +6,6 @@ Email/password authentication + anonymous session support.
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -80,29 +79,6 @@ async def get_current_user(
     return user
 
 
-async def get_optional_user(
-    token: str | None = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """
-    Dependency: returns authenticated user if token present, otherwise creates
-    an anonymous user and returns a token in the response header (handled by
-    calling code).  For simplicity, anonymous sessions always get a token too.
-    """
-    if token:
-        try:
-            return await get_current_user(token, db)
-        except HTTPException:
-            pass
-
-    # Create anonymous user
-    user = User(id=str(uuid.uuid4()), is_anonymous=True)
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -145,11 +121,3 @@ async def login(
     return TokenResponse(access_token=_create_token(user.id), user_id=user.id)
 
 
-@router.post("/anonymous", response_model=TokenResponse)
-async def anonymous_session(db: AsyncSession = Depends(get_db)):
-    """Create an anonymous user and return a short-lived token."""
-    user = User(is_anonymous=True)
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return TokenResponse(access_token=_create_token(user.id), user_id=user.id)

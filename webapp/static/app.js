@@ -12,7 +12,6 @@
 const AppState = {
   token:          null,
   userId:         null,
-  isAnon:         true,
 
   articleId:      null,
   articleTitle:   null,
@@ -90,12 +89,11 @@ const App = (() => {
       document.getElementById("error-overlay").classList.add("hidden");
     });
 
-    const { token, userId, isAnon, apiKey } = Auth.loadToken();
+    const { token, userId, apiKey } = Auth.loadToken();
 
     if (token && Auth.isTokenValid()) {
       AppState.token  = token;
       AppState.userId = userId;
-      AppState.isAnon = isAnon;
       AppState.apiKey = apiKey;
       transition("article");
       _wireArticlePhase();
@@ -111,31 +109,12 @@ const App = (() => {
   // ------------------------------------------------------------------
 
   function _wireAuthPhase() {
-    const btnAnon       = document.getElementById("btn-continue-anon");
-    const btnShowLogin  = document.getElementById("btn-show-login");
     const btnShowReg    = document.getElementById("btn-show-register");
     const btnBackLogin  = document.getElementById("btn-show-login-back");
     const formLogin     = document.getElementById("form-login");
     const formRegister  = document.getElementById("form-register");
     const loginError    = document.getElementById("login-error");
     const registerError = document.getElementById("register-error");
-
-    btnAnon.addEventListener("click", async () => {
-      btnAnon.disabled = true;
-      try {
-        await Auth.anonymousLogin();
-        transition("article");
-        _wireArticlePhase();
-      } catch (e) {
-        showError(e.message);
-        btnAnon.disabled = false;
-      }
-    });
-
-    btnShowLogin.addEventListener("click", () => {
-      document.getElementById("auth-anon-bar").classList.add("hidden");
-      formLogin.classList.remove("hidden");
-    });
 
     btnShowReg.addEventListener("click", () => {
       formLogin.classList.add("hidden");
@@ -306,9 +285,47 @@ const App = (() => {
       }
     });
 
-    // Start assessment loop; it calls App.startTutoring() when done
     Chat.lockInput();
-    Assessment.runLoop(AppState.sessionId);
+    if (AppState.sessionStatus === "active") {
+      _resumeOrOpenSession();
+    } else {
+      // Start assessment loop; it calls App.startTutoring() when done
+      Assessment.runLoop(AppState.sessionId);
+    }
+  }
+
+  async function _resumeOrOpenSession() {
+    // Load existing turns from DB
+    Chat.showThinking();
+    let hasTurns = false;
+    try {
+      const transcript = await apiFetch(`/api/sessions/${AppState.sessionId}/transcript`);
+      Chat.hideThinking();
+      const turns = transcript.turns || [];
+      for (const t of turns) {
+        if (t.role === "tutor") Chat.appendBubble("tutor", t.content);
+        else if (t.role === "user") Chat.appendBubble("user", t.content);
+      }
+      hasTurns = turns.length > 0;
+    } catch (e) {
+      Chat.hideThinking();
+      Chat.appendBubble("system", `Could not load session history: ${e.message}`);
+    }
+
+    if (!hasTurns) {
+      // Fresh session — fetch the opener question
+      Chat.showThinking();
+      try {
+        const openData = await apiFetch(`/api/sessions/${AppState.sessionId}/open`, { method: "POST" });
+        Chat.hideThinking();
+        Chat.appendBubble("tutor", openData.reply);
+      } catch (e) {
+        Chat.hideThinking();
+        Chat.appendBubble("system", `Could not load opening question: ${e.message}`);
+      }
+    }
+
+    startTutoring();
   }
 
   function startTutoring() {

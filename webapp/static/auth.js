@@ -9,20 +9,17 @@ const Auth = (() => {
   const TOKEN_KEY  = "socratic_token";
   const USERID_KEY = "socratic_user_id";
   const APIKEY_KEY = "socratic_api_key";
-  const ANON_KEY   = "socratic_is_anon";
 
   function loadToken() {
     const token  = localStorage.getItem(TOKEN_KEY);
     const userId = localStorage.getItem(USERID_KEY);
     const apiKey = localStorage.getItem(APIKEY_KEY);
-    const isAnon = localStorage.getItem(ANON_KEY) === "true";
-    return { token, userId, apiKey, isAnon };
+    return { token, userId, apiKey };
   }
 
-  function saveToken(token, userId, isAnon = true) {
+  function saveToken(token, userId) {
     localStorage.setItem(TOKEN_KEY,  token);
     localStorage.setItem(USERID_KEY, userId);
-    localStorage.setItem(ANON_KEY,   String(isAnon));
   }
 
   function saveApiKey(apiKey) {
@@ -32,7 +29,6 @@ const Auth = (() => {
   function clearToken() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USERID_KEY);
-    localStorage.removeItem(ANON_KEY);
     // Keep API key — user shouldn't have to re-enter it on logout
   }
 
@@ -57,17 +53,6 @@ const Auth = (() => {
     }
   }
 
-  async function anonymousLogin() {
-    const resp = await fetch("/api/auth/anonymous", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!resp.ok) throw new Error("Failed to create anonymous session");
-    const data = await resp.json();
-    saveToken(data.access_token, data.user_id, true);
-    return data;
-  }
-
   async function login(email, password) {
     const form = new URLSearchParams();
     form.append("username", email);
@@ -82,7 +67,7 @@ const Auth = (() => {
       throw new Error(err.detail || "Login failed");
     }
     const data = await resp.json();
-    saveToken(data.access_token, data.user_id, false);
+    saveToken(data.access_token, data.user_id);
     return data;
   }
 
@@ -97,15 +82,15 @@ const Auth = (() => {
       throw new Error(err.detail || "Registration failed");
     }
     const data = await resp.json();
-    saveToken(data.access_token, data.user_id, false);
+    saveToken(data.access_token, data.user_id);
     return data;
   }
 
   function logout() {
     clearToken();
-    App.transition("auth");
+    window.location.href = "/";
   }
 
   return { loadToken, saveToken, saveApiKey, clearToken, getHeaders, isTokenValid,
-           anonymousLogin, login, register, logout };
+           login, register, logout };
 })();
