@@ -20,7 +20,7 @@ This is a research project at the University of Alberta (CMPUT658). The evaluati
 
 ## Long-Term Vision
 
-The webapp is intended to eventually be a publicly available service for guided learning — not just a research data collection tool. The MVP focuses on learning a single Wikipedia article per session. Future work includes linking learning history to user accounts, spaced repetition, and a knowledge map visualization.
+The webapp is intended to eventually be a publicly available service for guided learning — not just a research data collection tool. The MVP focuses on learning a single Wikipedia article per session. Future work includes linking learning history to user accounts and spaced repetition.
 
 Cost is a scaling concern: the current configuration (Sonnet for tutoring + Haiku for guardrail/assessment) is not viable for a large free user base. A hosted subscription or credits model will be assessed once the product is validated. See the API Key & Cost section below.
 
@@ -41,7 +41,7 @@ Cost is a scaling concern: the current configuration (Sonnet for tutoring + Haik
 ├── simulation/          # CLI entrypoint for offline simulations
 │   ├── run.py           # main() with --profile, --topic, --turns flags
 │   └── profiles/        # students.yaml (3 synthetic profiles)
-├── tests/               # 76 tests (pytest-asyncio)
+├── tests/               # 104 tests (pytest-asyncio)
 ├── legacy/              # Old CLI files kept for reference
 ├── tools/               # visualize.html, summary.html (JSONL viewers)
 ├── data/                # junyi_kg.json KC graph (38 nodes)
@@ -103,3 +103,5 @@ No personally identifiable information is shared with third parties. The Anthrop
 - `sqlalchemy` + `aiosqlite` — async ORM
 - `python-jose` — JWT auth
 - `pyyaml` — student profile loading
+- `@viz-js/viz` (CDN) — Graphviz/WASM for knowledge graph rendering
+- `svg-pan-zoom` (CDN) — pan/zoom for the knowledge graph SVG

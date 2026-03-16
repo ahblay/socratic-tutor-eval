@@ -10,6 +10,8 @@ This directory contains documentation for the Socratic Tutor Evaluation Framewor
 - **[implementation_plan.md](implementation_plan.md)** — Phase-by-phase plan, current status, pending work
 - **future_directions.md** — Local only (gitignored): ideas for future extensions
 
+See also: `KNOWN_ISSUES.md` at the project root for documented bugs and failure modes not yet addressed.
+
 ## For New Contributors
 
 Start with `overview.md` to understand the project, then `architecture.md` for system design, then `implementation_plan.md` to see what's done and what needs to be built next.

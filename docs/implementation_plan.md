@@ -72,6 +72,7 @@ Single-page web UI (plain HTML/CSS/JS, no build step, no framework).
 - `webapp/static/article.js` — URL resolution, domain map polling
 - `webapp/static/assessment.js` — assessment loop (promise-based one-shot input handler)
 - `webapp/static/chat.js` — DOM manipulation for message bubbles, thinking indicator
+- `webapp/static/graph.js` — knowledge graph panel (viz.js + svg-pan-zoom); see Phase 6
 - `webapp/static/app.js` — state machine orchestration, `apiFetch` utility
 
 **State machine phases:** `auth` → `article` → `chat (assessment)` → `chat (tutoring)` → `ended`
@@ -101,10 +102,20 @@ Single-page web UI (plain HTML/CSS/JS, no build step, no framework).
 - Domain map generation deliberately uses the server's key (shared cached resource).
 - Server must have `ANTHROPIC_API_KEY` set for domain map generation (documented in `config.py`).
 
-### Phase 6 — Knowledge Map ⬜
-Visual representation of student's current KC mastery across the domain map graph.
-- Show mastered/frontier/unmastered KCs
-- Update after each session (post-hoc BKT run)
+### Phase 6 — Knowledge Graph Panel ✅
+Live KC knowledge graph in the chat phase showing the tutor's model of student understanding.
+
+**Implementation:**
+- `webapp/static/graph.js` — `KCGraph` module with `init(domainMap)`, `setBKT(snapshot)`, `setTutorState(state)`
+- `GET /api/sessions/{id}/graph-state` — returns `domain_map`, `bkt_snapshot`, `tutor_state`
+- `TurnResponse` enriched with `tutor_state` field so the observations panel updates each turn
+- Split chat layout: 46% graph panel (left) + 54% chat panel (right); graph panel hidden on mobile
+
+**Rendering**: viz.js (Graphviz WASM) renders DOT-language source; svg-pan-zoom adds pan/zoom. Nodes coloured by p_mastered (blue → amber → green); frontier nodes get a thicker amber border.
+
+**Domain map prerequisite fix pass** (`_fix_prerequisite_references` in `domain_cache.py`): a Haiku LLM call canonicalises `prerequisite_for` references so they exactly match `core_concepts` concept names. Runs once at domain-map creation time; result is cached permanently. Prevents disconnected graph nodes caused by LLM name inconsistency.
+
+**Known limitation**: See `KNOWN_ISSUES.md` KI-001 — two sequential LLM calls (Sonnet + Haiku) during domain map generation can exceed the frontend's 120 s poll timeout.
 
 ### Phase 7 — Spaced Repetition ⬜
 Use `retention_schedule` table to schedule review sessions.

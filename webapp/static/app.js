@@ -24,6 +24,9 @@ const AppState = {
   turnCount:      0,
 
   apiKey:         null,
+
+  domainMap:      null,
+  bktSnapshot:    null,
 };
 
 // ---------------------------------------------------------------------------
@@ -285,12 +288,29 @@ const App = (() => {
       }
     });
 
+    // Load graph state (domain map + BKT snapshot) and initialise graph panel
+    _loadGraphState();
+
     Chat.lockInput();
     if (AppState.sessionStatus === "active") {
       _resumeOrOpenSession();
     } else {
       // Start assessment loop; it calls App.startTutoring() when done
       Assessment.runLoop(AppState.sessionId);
+    }
+  }
+
+  async function _loadGraphState() {
+    try {
+      const gs = await apiFetch(`/api/sessions/${AppState.sessionId}/graph-state`);
+      AppState.domainMap   = gs.domain_map;
+      AppState.bktSnapshot = gs.bkt_snapshot;
+      await KCGraph.init(gs.domain_map);
+      await KCGraph.setBKT(gs.bkt_snapshot);
+      if (gs.tutor_state) KCGraph.setTutorState(gs.tutor_state);
+    } catch (e) {
+      // Graph panel is non-critical — silently fail
+      console.warn("graph-state fetch failed:", e.message);
     }
   }
 
@@ -338,6 +358,10 @@ const App = (() => {
     document.getElementById("btn-end-session").classList.remove("hidden");
     Chat.unlockInput();
 
+    // (Re-)load graph state: assessment has just written initial knowledge estimates;
+    // these are the tutor's starting model and do not change during the session.
+    _loadGraphState();
+
     // Wire the persistent turn handler
     document.getElementById("form-chat").addEventListener("submit", _handleTurn);
   }
@@ -366,6 +390,7 @@ const App = (() => {
         AppState.maxTurns - AppState.turnCount,
         AppState.maxTurns,
       );
+      if (data.tutor_state) KCGraph.setTutorState(data.tutor_state);
       Chat.unlockInput();
     } catch (e) {
       Chat.hideThinking();

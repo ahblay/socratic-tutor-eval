@@ -46,6 +46,7 @@ class TurnRequest(BaseModel):
 class TurnResponse(BaseModel):
     reply: str
     turn_number: int
+    tutor_state: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +191,7 @@ async def open_session(
     # turn_count tracks student-initiated exchanges; opener does not consume a turn slot
 
     await db.commit()
-    return TurnResponse(reply=reply, turn_number=session.turn_count)
+    return TurnResponse(reply=reply, turn_number=session.turn_count, tutor_state=tutor_state)
 
 
 @router.post("/{session_id}/turn", response_model=TurnResponse)
@@ -300,7 +301,37 @@ async def post_turn(
 
     await db.commit()
 
-    return TurnResponse(reply=reply, turn_number=session.turn_count)
+    return TurnResponse(reply=reply, turn_number=session.turn_count, tutor_state=tutor_state)
+
+
+@router.get("/{session_id}/graph-state")
+async def get_graph_state(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Return domain map + BKT snapshot for the knowledge graph panel."""
+    session = await _get_session_or_404(session_id, user.id, db)
+
+    article_result = await db.execute(
+        select(Article).where(Article.id == session.article_id)
+    )
+    article = article_result.scalar_one()
+
+    bkt_result = await db.execute(
+        select(BKTStateRow).where(
+            BKTStateRow.user_id == user.id,
+            BKTStateRow.article_id == session.article_id,
+        )
+    )
+    bkt_rows = bkt_result.scalars().all()
+    bkt_snapshot = {row.kc_id: row.p_mastered for row in bkt_rows}
+
+    return {
+        "domain_map": article.domain_map,
+        "bkt_snapshot": bkt_snapshot,
+        "tutor_state": session.tutor_state_snapshot,
+    }
 
 
 @router.post("/{session_id}/end")

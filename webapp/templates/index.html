@@ -96,20 +96,43 @@
       </div>
     </header>
 
-    <div id="chat-messages" role="log" aria-live="polite"></div>
+    <div class="chat-body">
 
-    <div id="thinking" class="thinking-bar hidden">
-      <span class="dot-pulse"><span></span><span></span><span></span></span>
-      <span>Thinking…</span>
+      <!-- ── Graph panel (left) ── -->
+      <div id="graph-panel">
+        <div class="graph-title">Tutor's model of student knowledge</div>
+        <div id="kg-svg"></div>
+      </div>
+
+      <!-- ── Chat panel (right) ── -->
+      <div id="chat-panel">
+        <div id="chat-messages" role="log" aria-live="polite"></div>
+
+        <div id="tutor-obs-section" class="obs-section hidden">
+          <div class="obs-title">Tutor observations</div>
+          <div class="obs-list" id="obs-list"></div>
+        </div>
+
+        <div class="mastery-section">
+          <div class="knowledge-title">Student knowledge (tutor's estimate)</div>
+          <div id="kg-bars"></div>
+        </div>
+
+        <div id="thinking" class="thinking-bar hidden">
+          <span class="dot-pulse"><span></span><span></span><span></span></span>
+          <span>Thinking…</span>
+        </div>
+
+        <form id="form-chat" class="chat-input-bar">
+          <textarea id="inp-chat"
+                    placeholder="Type your answer…"
+                    rows="2"
+                    aria-label="Your message"></textarea>
+          <button type="submit" id="btn-send" class="btn-primary">Send</button>
+        </form>
+      </div>
+
     </div>
-
-    <form id="form-chat" class="chat-input-bar">
-      <textarea id="inp-chat"
-                placeholder="Type your answer…"
-                rows="2"
-                aria-label="Your message"></textarea>
-      <button type="submit" id="btn-send" class="btn-primary">Send</button>
-    </form>
   </section>
 
   <!-- ── ENDED ── -->
@@ -131,10 +154,14 @@
 
 </div><!-- #app -->
 
+<!-- Graphviz (viz.js) + pan/zoom for knowledge graph panel -->
+<script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.25.0/dist/viz-global.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
 <script src="/static/auth.js"></script>
 <script src="/static/article.js"></script>
 <script src="/static/assessment.js"></script>
 <script src="/static/chat.js"></script>
+<script src="/static/graph.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

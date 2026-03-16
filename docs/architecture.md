@@ -5,7 +5,8 @@
 ```
 Wikipedia URL
     → fetch article (REST API)
-    → domain mapper (Claude) → domain map (stored in DB)
+    → domain mapper (Sonnet) → domain map
+    → prerequisite-fix pass (Haiku) → canonicalised domain map (stored in DB)
     → pre-session assessment (2–4 questions) → initial BKT L0s
     → tutoring session (Socratic dialogue, N turns)
     → transcript + tutor state snapshots (stored in DB)
@@ -62,7 +63,7 @@ BKTEvaluator(bkt_states={"kc_id": 0.3, ...}, target_kcs=["kc1", "kc2"])
 
 ## Component: Domain Map
 
-Produced once per Wikipedia article by `domain-mapper` (Claude opus call). Stored in DB.
+Produced once per Wikipedia article by a two-step LLM process. Stored in DB.
 
 ```json
 {
@@ -83,7 +84,11 @@ Produced once per Wikipedia article by `domain-mapper` (Claude opus call). Store
 }
 ```
 
-`build_kg_from_domain_map()` in `webapp/services/domain_cache.py` translates this to BKTEvaluator format: `{"kcs": [...], "edges": [...]}`.
+**Two-step generation** (`webapp/services/domain_cache.py`):
+1. **Sonnet call** (`compute_domain_map`): generates the full domain map JSON from article text.
+2. **Haiku fix pass** (`_fix_prerequisite_references`): canonicalises all `prerequisite_for` entries so they exactly match a `concept` name in `core_concepts`. This is necessary because the Sonnet call sometimes writes concept names inconsistently across sections, which causes edges to be silently dropped when building the KC graph. The fix pass has a fast path (skips if already consistent), a sanity check (rejects the fixed map if the concept set changed), and a fail-safe (returns the original on any error). One-time cost per article; result is cached permanently.
+
+`build_kg_from_domain_map()` translates the domain map to BKTEvaluator format: `{"kcs": [...], "edges": [...]}`.
 
 ## Component: Pre-Session Assessment
 
@@ -111,6 +116,33 @@ Steps through transcript turn-by-turn:
 4. Evaluate tutor question against frontier (KFT)
 5. Detect tangent turns; evaluate tangent handling (THQ)
 
+## Component: Knowledge Graph UI (`webapp/static/graph.js`)
+
+The chat phase includes a live knowledge graph panel that visualises the tutor's model of the student's understanding. The graph is populated from assessment results and does **not** update turn-by-turn during tutoring.
+
+**Rendering stack:**
+- **viz.js** (`@viz-js/viz@3.25.0`, CDN) — Graphviz compiled to WASM. Renders the KC dependency graph from a DOT-language string.
+- **svg-pan-zoom** (`svg-pan-zoom@3.6.1`, CDN) — adds pan and pinch-to-zoom to the rendered SVG.
+- `_viz` and `_panZoom` are module-level singletons; `_panZoom.destroy()` is called before each re-render to prevent memory leaks.
+
+**Node colouring**: `knowledgeColor(p)` maps p_mastered (0–1) to a hex colour along a blue → amber → green gradient. Frontier nodes (all prerequisites mastered, this concept not yet mastered) get a thicker amber border.
+
+**Data source** (`GET /api/sessions/{id}/graph-state`):
+```json
+{
+  "domain_map":    { "core_concepts": [...], ... },
+  "bkt_snapshot":  { "<kc-slug>": 0.42, ... },
+  "tutor_state":   { "student_understanding": [...], "frustration_level": "..." }
+}
+```
+- `domain_map`: article's KC graph — used to build the DOT source and the mastery bar list.
+- `bkt_snapshot`: per-KC p_mastered values from the assessment — used to colour nodes and fill bars.
+- `tutor_state`: tutor's latest observations — shown as chips in the "Tutor observations" panel.
+
+`app.js` calls `_loadGraphState()` twice: once when entering the chat phase and once at the start of tutoring (after assessment writes the initial BKT snapshot).
+
+Each turn response (`POST /sessions/{id}/turn`) also returns a `tutor_state` field so the observations panel updates after every student message without a full graph refresh.
+
 ## Component: BYOK API Key Handling
 
 Users provide their own Anthropic API key. It is passed as a custom request header (`X-API-Key`) on session creation and each turn request. The server reads it per-request and passes it to the `SocraticTutor` — it is never written to the DB.
@@ -131,6 +163,7 @@ POST /api/sessions/{id}/assessment/start   → begin pre-assessment
 POST /api/sessions/{id}/assessment/answer  → submit assessment answer
 POST /api/sessions/{id}/assessment/complete → finalize L0s, transition to active
 POST /api/sessions/{id}/turn        → one tutoring exchange
+GET  /api/sessions/{id}/graph-state → domain map + BKT snapshot + tutor state (for graph panel)
 GET  /api/sessions/{id}/transcript  → retrieve full conversation
 POST /api/sessions/{id}/end         → mark session completed
 POST /api/export/{id}/analyze       → run post-hoc evaluation
