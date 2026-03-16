@@ -49,12 +49,13 @@ def create_app() -> FastAPI:
     )
 
     # Routers (registered here as they are implemented)
-    from webapp.api import articles, sessions, assessment, auth, export
+    from webapp.api import articles, sessions, assessment, auth, export, admin
     app.include_router(articles.router, prefix="/api/articles", tags=["articles"])
     app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
     app.include_router(assessment.router, prefix="/api/sessions", tags=["assessment"])
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     app.include_router(export.router, prefix="/api/export", tags=["export"])
+    app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
     # Static files and templates
     static_dir = pathlib.Path(__file__).parent / "static"

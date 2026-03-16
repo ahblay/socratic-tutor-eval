@@ -75,6 +75,22 @@ async def _register(client, email="u@test.com", password="pw") -> str:
     return r.json()["access_token"]
 
 
+async def _register_superuser(client, email="admin@test.com", password="pw") -> str:
+    """Register a user and promote them to superuser directly in the DB."""
+    token = await _register(client, email, password)
+    user_id = (await client.post(
+        "/api/auth/login", data={"username": email, "password": password}
+    )).json()["user_id"]
+    async with TestSessionLocal() as db:
+        from sqlalchemy import select
+        from webapp.db.models import User
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one()
+        user.is_superuser = True
+        await db.commit()
+    return token
+
+
 async def _resolve_article(client, page_id=12345, title="DNA", mark_ready=True):
     from webapp.services.wikipedia import WikiArticle, WikiSection
     mock_article = WikiArticle(
@@ -871,3 +887,125 @@ class TestAssessmentService:
         assert class_from_l0(0.30) == "partial"
         assert class_from_l0(0.29) == "absent"
         assert class_from_l0(0.10) == "absent"
+
+
+# ---------------------------------------------------------------------------
+# Admin routes
+# ---------------------------------------------------------------------------
+
+class TestAdmin:
+    async def test_non_superuser_cannot_add_credits(self, client):
+        token = await _register(client)
+        r = await client.post(
+            "/api/admin/users/some-id/credits",
+            json={"amount": 10},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 403
+
+    async def test_non_superuser_cannot_publish(self, client):
+        token = await _register(client)
+        r = await client.post(
+            "/api/admin/articles/some-id/publish",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 403
+
+    async def test_non_superuser_cannot_list_users(self, client):
+        token = await _register(client)
+        r = await client.get(
+            "/api/admin/users",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 403
+
+    async def test_add_credits_increases_balance(self, client):
+        admin_token = await _register_superuser(client)
+        user_token = await _register(client, "student@test.com")
+        user_id = (await client.post(
+            "/api/auth/login", data={"username": "student@test.com", "password": "pw"}
+        )).json()["user_id"]
+
+        r = await client.post(
+            f"/api/admin/users/{user_id}/credits",
+            json={"amount": 25},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["credits_remaining"] == 25
+
+        # Adding more credits accumulates
+        r2 = await client.post(
+            f"/api/admin/users/{user_id}/credits",
+            json={"amount": 10},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert r2.json()["credits_remaining"] == 35
+
+    async def test_add_credits_zero_rejected(self, client):
+        admin_token = await _register_superuser(client)
+        r = await client.post(
+            "/api/admin/users/any-id/credits",
+            json={"amount": 0},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert r.status_code == 422  # Pydantic Field(gt=0) validation
+
+    async def test_add_credits_user_not_found(self, client):
+        admin_token = await _register_superuser(client)
+        r = await client.post(
+            "/api/admin/users/nonexistent/credits",
+            json={"amount": 5},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert r.status_code == 404
+
+    async def test_publish_article(self, client):
+        admin_token = await _register_superuser(client)
+        article_id = await _resolve_article(client, mark_ready=True)
+
+        r = await client.post(
+            f"/api/admin/articles/{article_id}/publish",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["is_published"] is True
+
+    async def test_publish_requires_ready_domain_map(self, client):
+        admin_token = await _register_superuser(client)
+        article_id = await _resolve_article(client, mark_ready=False)
+
+        r = await client.post(
+            f"/api/admin/articles/{article_id}/publish",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert r.status_code == 409
+
+    async def test_unpublish_article(self, client):
+        admin_token = await _register_superuser(client)
+        article_id = await _resolve_article(client, mark_ready=True)
+
+        await client.post(
+            f"/api/admin/articles/{article_id}/publish",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        r = await client.post(
+            f"/api/admin/articles/{article_id}/unpublish",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["is_published"] is False
+
+    async def test_list_users(self, client):
+        admin_token = await _register_superuser(client)
+        await _register(client, "a@test.com")
+        await _register(client, "b@test.com")
+
+        r = await client.get(
+            "/api/admin/users",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert r.status_code == 200
+        emails = [u["email"] for u in r.json()]
+        assert "a@test.com" in emails
+        assert "b@test.com" in emails
