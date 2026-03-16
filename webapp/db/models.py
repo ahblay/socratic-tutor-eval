@@ -50,6 +50,10 @@ class User(Base):
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     # Timestamp of explicit data-collection consent (required for registered users)
     consented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Credit system — each tutoring turn costs 1 credit; 0 = access blocked
+    credits_remaining: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Superusers bypass credit checks and article-generation restrictions
+    is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     sessions: Mapped[list[Session]] = relationship("Session", back_populates="user")
     bkt_states: Mapped[list[BKTStateRow]] = relationship("BKTStateRow", back_populates="user")
@@ -75,6 +79,8 @@ class Article(Base):
     # "pending" | "ready" | "failed"
     domain_map_status: Mapped[str] = mapped_column(String, default="pending")
     last_fetched: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # Only published articles appear in the lesson catalog
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     sessions: Mapped[list[Session]] = relationship("Session", back_populates="article")
     bkt_states: Mapped[list[BKTStateRow]] = relationship("BKTStateRow", back_populates="article")
