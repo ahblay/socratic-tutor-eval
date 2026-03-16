@@ -75,11 +75,6 @@ async def _register(client, email="u@test.com", password="pw") -> str:
     return r.json()["access_token"]
 
 
-async def _anon(client) -> str:
-    r = await client.post("/api/auth/anonymous")
-    return r.json()["access_token"]
-
-
 async def _resolve_article(client, page_id=12345, title="DNA", mark_ready=True):
     from webapp.services.wikipedia import WikiArticle, WikiSection
     mock_article = WikiArticle(
@@ -138,13 +133,6 @@ async def _create_session(client, token, article_id) -> str:
 # ---------------------------------------------------------------------------
 
 class TestAuth:
-    async def test_anonymous_session(self, client):
-        r = await client.post("/api/auth/anonymous")
-        assert r.status_code == 200
-        data = r.json()
-        assert "access_token" in data
-        assert "user_id" in data
-
     async def test_register(self, client):
         r = await client.post("/api/auth/register", json={
             "email": "test@example.com", "password": "password123", "consented": True
@@ -276,7 +264,7 @@ class TestSessions:
         article_id = await _resolve_article(client)
         session_id = await _create_session(client, token, article_id)
 
-        other_token = await _anon(client)
+        other_token = await _register(client, "other@test.com")
         r = await client.get(
             f"/api/sessions/{session_id}",
             headers={"Authorization": f"Bearer {other_token}"}
