@@ -140,6 +140,20 @@ async def _resolve_article(client, page_id=12345, title="DNA", mark_ready=True):
 
 
 async def _create_session(client, token, article_id) -> str:
+    # Decode token to get user_id and grant credits so session creation succeeds.
+    # Tests that specifically test the 0-credit path do not use this helper.
+    from jose import jwt as jose_jwt
+    from webapp import config
+    payload = jose_jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])
+    user_id = payload["sub"]
+    async with TestSessionLocal() as db:
+        from sqlalchemy import select
+        from webapp.db.models import User
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one()
+        user.credits_remaining = 50
+        await db.commit()
+
     r = await client.post(
         "/api/sessions",
         json={"article_id": article_id},
@@ -294,6 +308,17 @@ class TestSessions:
     async def test_session_starts_in_pre_assessment(self, client):
         token = await _register(client)
         article_id = await _resolve_article(client)
+        # Grant credits so session creation is not blocked
+        from jose import jwt as jose_jwt
+        from webapp import config
+        user_id = jose_jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])["sub"]
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import User
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one()
+            user.credits_remaining = 5
+            await db.commit()
         r = await client.post(
             "/api/sessions", json={"article_id": article_id},
             headers={"Authorization": f"Bearer {token}"}
@@ -1063,3 +1088,169 @@ class TestAdmin:
         emails = [u["email"] for u in r.json()]
         assert "a@test.com" in emails
         assert "b@test.com" in emails
+
+
+# ---------------------------------------------------------------------------
+# Credit enforcement
+# ---------------------------------------------------------------------------
+
+class TestCredits:
+    async def test_create_session_blocked_with_no_credits(self, client):
+        token = await _register(client)  # 0 credits
+        article_id = await _resolve_article(client)
+        r = await client.post(
+            "/api/sessions",
+            json={"article_id": article_id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 402
+
+    async def test_create_session_allowed_with_credits(self, client):
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        # Grant credits via DB
+        from jose import jwt as jose_jwt
+        from webapp import config
+        user_id = jose_jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])["sub"]
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import User
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one()
+            user.credits_remaining = 5
+            await db.commit()
+        r = await client.post(
+            "/api/sessions",
+            json={"article_id": article_id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+
+    async def test_resume_bypasses_credit_check(self, client):
+        """Returning to an existing active session works even with 0 credits."""
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        session_id = await _create_session(client, token, article_id)  # grants 50 credits
+
+        # Drain all credits
+        from jose import jwt as jose_jwt
+        from webapp import config
+        user_id = jose_jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])["sub"]
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import User
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one()
+            user.credits_remaining = 0
+            await db.commit()
+
+        # POST /sessions should return the existing session, not 402
+        r = await client.post(
+            "/api/sessions",
+            json={"article_id": article_id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["session_id"] == session_id
+
+    async def test_turn_blocked_with_no_credits(self, client):
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        session_id = await _activate_session(client, token, article_id)  # grants credits internally
+
+        # Drain credits
+        from jose import jwt as jose_jwt
+        from webapp import config
+        user_id = jose_jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])["sub"]
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import User
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one()
+            user.credits_remaining = 0
+            await db.commit()
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="Hi."):
+            r = await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "Hello"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert r.status_code == 402
+
+    async def test_turn_decrements_credits(self, client):
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        session_id = await _activate_session(client, token, article_id)
+
+        from jose import jwt as jose_jwt
+        from webapp import config
+        user_id = jose_jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])["sub"]
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="Think about it."):
+            await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "Hello."},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import User
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one()
+            assert user.credits_remaining == 49  # started at 50, used 1
+
+    async def test_superuser_turn_does_not_decrement_credits(self, client):
+        admin_token = await _register_superuser(client)
+        article_id = await _resolve_article(client)
+        session_id = await _activate_session(client, admin_token, article_id)
+
+        from jose import jwt as jose_jwt
+        from webapp import config
+        user_id = jose_jwt.decode(admin_token, config.SECRET_KEY, algorithms=["HS256"])["sub"]
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="Good question."):
+            r = await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "Hello."},
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+        assert r.status_code == 200
+
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import User
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one()
+            assert user.credits_remaining == 50  # superuser credits unchanged (not decremented)
+
+    async def test_turn_402_leaves_session_active(self, client):
+        """Credits exhausted mid-session: session stays active for resumption."""
+        token = await _register(client)
+        article_id = await _resolve_article(client)
+        session_id = await _activate_session(client, token, article_id)
+
+        from jose import jwt as jose_jwt
+        from webapp import config
+        user_id = jose_jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])["sub"]
+        async with TestSessionLocal() as db:
+            from sqlalchemy import select
+            from webapp.db.models import User
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one()
+            user.credits_remaining = 0
+            await db.commit()
+
+        with patch("tutor_eval.tutors.socratic.SocraticTutor.respond", return_value="Hi."):
+            await client.post(
+                f"/api/sessions/{session_id}/turn",
+                json={"message": "Hello"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        r = await client.get(
+            f"/api/sessions/{session_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.json()["status"] == "active"
