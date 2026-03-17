@@ -20,10 +20,7 @@ const AppState = {
 
   sessionId:      null,
   sessionStatus:  null,
-  maxTurns:       null,
   turnCount:      0,
-
-  apiKey:         null,
 
   domainMap:      null,
   bktSnapshot:    null,
@@ -92,12 +89,11 @@ const App = (() => {
       document.getElementById("error-overlay").classList.add("hidden");
     });
 
-    const { token, userId, apiKey } = Auth.loadToken();
+    const { token, userId } = Auth.loadToken();
 
     if (token && Auth.isTokenValid()) {
       AppState.token  = token;
       AppState.userId = userId;
-      AppState.apiKey = apiKey;
       transition("article");
       _wireArticlePhase();
     } else {
@@ -171,10 +167,6 @@ const App = (() => {
   // ------------------------------------------------------------------
 
   function _wireArticlePhase() {
-    // Pre-fill API key if stored
-    const { apiKey } = Auth.loadToken();
-    if (apiKey) document.getElementById("inp-api-key").value = apiKey;
-
     document.getElementById("btn-logout").addEventListener("click", Auth.logout);
 
     document.getElementById("form-article").addEventListener("submit", async (e) => {
@@ -188,12 +180,10 @@ const App = (() => {
   }
 
   async function _handleArticleSubmit() {
-    const urlInput    = document.getElementById("inp-url").value.trim();
-    const apiKeyInput = document.getElementById("inp-api-key").value.trim();
-    const maxTurns    = parseInt(document.getElementById("inp-max-turns").value, 10) || 50;
-    const errorEl     = document.getElementById("article-error");
-    const pollingEl   = document.getElementById("article-polling");
-    const cardEl      = document.getElementById("article-card");
+    const urlInput  = document.getElementById("inp-url").value.trim();
+    const errorEl   = document.getElementById("article-error");
+    const pollingEl = document.getElementById("article-polling");
+    const cardEl    = document.getElementById("article-card");
 
     errorEl.classList.add("hidden");
     cardEl.classList.add("hidden");
@@ -204,15 +194,6 @@ const App = (() => {
       errorEl.classList.remove("hidden");
       return;
     }
-    if (!apiKeyInput) {
-      errorEl.textContent = "Please enter your Anthropic API key.";
-      errorEl.classList.remove("hidden");
-      return;
-    }
-
-    Auth.saveApiKey(apiKeyInput);
-    AppState.apiKey   = apiKeyInput;
-    AppState.maxTurns = maxTurns;
 
     document.getElementById("btn-resolve").disabled = true;
 
@@ -250,10 +231,7 @@ const App = (() => {
     try {
       const session = await apiFetch("/api/sessions", {
         method: "POST",
-        body: JSON.stringify({
-          article_id: AppState.articleId,
-          max_turns:  AppState.maxTurns,
-        }),
+        body: JSON.stringify({ article_id: AppState.articleId }),
       });
       AppState.sessionId     = session.session_id;
       AppState.sessionStatus = session.status;
@@ -275,7 +253,6 @@ const App = (() => {
     transition("chat");
     Chat.clearMessages();
     Chat.setTopic(AppState.articleTitle || "");
-    Chat.updateTurnsRemaining(null, null); // hide until tutoring starts
 
     document.getElementById("btn-logout2").addEventListener("click", Auth.logout);
     document.getElementById("btn-end-session").addEventListener("click", _endSession);
@@ -351,10 +328,6 @@ const App = (() => {
   function startTutoring() {
     AppState.sessionStatus = "active";
     Chat.setPhaseLabel("Tutoring");
-    Chat.updateTurnsRemaining(
-      AppState.maxTurns - AppState.turnCount,
-      AppState.maxTurns,
-    );
     document.getElementById("btn-end-session").classList.remove("hidden");
     Chat.unlockInput();
 
@@ -386,17 +359,13 @@ const App = (() => {
       AppState.turnCount = data.turn_number;
       Chat.hideThinking();
       Chat.appendBubble("tutor", data.reply);
-      Chat.updateTurnsRemaining(
-        AppState.maxTurns - AppState.turnCount,
-        AppState.maxTurns,
-      );
       if (data.tutor_state) KCGraph.setTutorState(data.tutor_state);
       Chat.unlockInput();
     } catch (e) {
       Chat.hideThinking();
-      if (e.message.includes("budget")) {
-        Chat.appendBubble("system", "Turn budget reached. Session ended.");
-        _endSession();
+      if (e.message.includes("credits") || e.message.includes("No credits")) {
+        Chat.appendBubble("system", "You have no credits remaining. Contact the administrator to receive more credits. Your session has been saved and can be resumed.");
+        // Session stays active — do not end it; leave input locked until credits are restored
       } else {
         Chat.appendBubble("system", `Error: ${e.message}`);
         Chat.unlockInput();

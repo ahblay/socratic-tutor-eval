@@ -1,20 +1,15 @@
 /**
  * auth.js — Token management and authentication.
- *
- * All API keys and tokens are stored in localStorage.
- * The Anthropic API key is sent per-request and never persisted server-side.
  */
 
 const Auth = (() => {
   const TOKEN_KEY  = "socratic_token";
   const USERID_KEY = "socratic_user_id";
-  const APIKEY_KEY = "socratic_api_key";
 
   function loadToken() {
     const token  = localStorage.getItem(TOKEN_KEY);
     const userId = localStorage.getItem(USERID_KEY);
-    const apiKey = localStorage.getItem(APIKEY_KEY);
-    return { token, userId, apiKey };
+    return { token, userId };
   }
 
   function saveToken(token, userId) {
@@ -22,22 +17,15 @@ const Auth = (() => {
     localStorage.setItem(USERID_KEY, userId);
   }
 
-  function saveApiKey(apiKey) {
-    localStorage.setItem(APIKEY_KEY, apiKey);
-  }
-
   function clearToken() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USERID_KEY);
-    // Keep API key — user shouldn't have to re-enter it on logout
   }
 
   function getHeaders() {
     const token  = localStorage.getItem(TOKEN_KEY);
-    const apiKey = localStorage.getItem(APIKEY_KEY);
     const headers = { "Content-Type": "application/json" };
-    if (token)  headers["Authorization"] = `Bearer ${token}`;
-    if (apiKey) headers["X-API-Key"] = apiKey;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
     return headers;
   }
 
@@ -91,6 +79,6 @@ const Auth = (() => {
     window.location.href = "/";
   }
 
-  return { loadToken, saveToken, saveApiKey, clearToken, getHeaders, isTokenValid,
+  return { loadToken, saveToken, clearToken, getHeaders, isTokenValid,
            login, register, logout };
 })();

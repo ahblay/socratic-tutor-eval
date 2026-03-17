@@ -54,15 +54,6 @@
         <input id="inp-url" type="text"
                placeholder="https://en.wikipedia.org/wiki/..."
                autocomplete="off" spellcheck="false">
-        <div class="form-row">
-          <input id="inp-api-key" type="password"
-                 placeholder="Anthropic API key (sk-ant-...)"
-                 autocomplete="off" spellcheck="false">
-          <input id="inp-max-turns" type="number"
-                 placeholder="Max turns" value="50" min="1" max="500"
-                 style="width: 110px;">
-        </div>
-        <p class="hint small">Your API key is never stored on the server.</p>
         <button type="submit" id="btn-resolve" class="btn-primary">Analyse article →</button>
       </form>
       <p id="article-error" class="error-msg hidden"></p>
