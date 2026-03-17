@@ -7,13 +7,15 @@
  */
 
 const KCGraph = (() => {
-  let _viz               = null;   // viz.js instance (initialised once)
-  let _panZoom           = null;   // svg-pan-zoom instance
-  let _concepts          = [];
-  let _barEls            = {};
-  let _ready             = false;
-  let _bktSnapshot       = {};
-  let _prevUnderstanding = [];
+  let _viz                = null;   // viz.js instance (initialised once)
+  let _panZoom            = null;   // svg-pan-zoom instance
+  let _concepts           = [];
+  let _sequence           = [];     // recommended_sequence from domain map
+  let _barEls             = {};
+  let _ready              = false;
+  let _bktSnapshot        = {};
+  let _activeConceptIndex = -1;     // current_concept_index from tutor state
+  let _prevUnderstanding  = [];
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -67,7 +69,7 @@ const KCGraph = (() => {
 
   // ── DOT source builder ────────────────────────────────────────────────────
 
-  function _buildDot(concepts, bktSnapshot) {
+  function _buildDot(concepts, bktSnapshot, activeConceptName) {
     const nameSet = new Set(concepts.map(c => c.concept));
     const lines = [
       'digraph G {',
@@ -86,11 +88,14 @@ const KCGraph = (() => {
       const p     = bktSnapshot[id] ?? 0;
       const fill  = knowledgeColor(p);
       const label = wrapLabel(c.concept);
+      // Active: tutor is currently working on this concept
+      const isActive   = activeConceptName && c.concept === activeConceptName;
       // Frontier: all prerequisites are mastered but this one isn't
-      const isFrontier = !isMastered(c.concept, bktSnapshot, concepts) &&
+      const isFrontier = !isActive &&
+        !isMastered(c.concept, bktSnapshot, concepts) &&
         (prereqsOf(c.concept, concepts)).every(p => isMastered(p, bktSnapshot, concepts));
-      const borderColor = isFrontier ? '#f59e0b' : '#3b82f6';
-      const penWidth    = isFrontier ? '3.0' : '1.5';
+      const borderColor = isActive ? '#ffffff' : (isFrontier ? '#f59e0b' : '#3b82f6');
+      const penWidth    = isActive ? '3.5'    : (isFrontier ? '2.5'    : '1.5');
       lines.push(
         `  "${id}" [label="${label}", fillcolor="${fill}",` +
         ` color="${borderColor}", penwidth=${penWidth}];`
@@ -139,7 +144,8 @@ const KCGraph = (() => {
       _panZoom = null;
     }
 
-    const dot = _buildDot(_concepts, _bktSnapshot);
+    const activeConceptName = _activeConceptIndex >= 0 ? _sequence[_activeConceptIndex] : null;
+    const dot = _buildDot(_concepts, _bktSnapshot, activeConceptName);
     try {
       const svgEl = _viz.renderSVGElement(dot);
       // Let the SVG fill the container; svg-pan-zoom will handle viewport
@@ -168,11 +174,13 @@ const KCGraph = (() => {
   // ── init ─────────────────────────────────────────────────────────────────
 
   async function init(domainMap) {
-    _concepts          = (domainMap && domainMap.core_concepts) || [];
-    _bktSnapshot       = {};
-    _barEls            = {};
-    _ready             = false;
-    _prevUnderstanding = [];
+    _concepts           = (domainMap && domainMap.core_concepts) || [];
+    _sequence           = (domainMap && domainMap.recommended_sequence) || [];
+    _bktSnapshot        = {};
+    _barEls             = {};
+    _ready              = false;
+    _activeConceptIndex = -1;
+    _prevUnderstanding  = [];
 
     const barsEl  = document.getElementById('kg-bars');
     const obsList = document.getElementById('obs-list');
@@ -229,10 +237,29 @@ const KCGraph = (() => {
 
   // ── setTutorState ─────────────────────────────────────────────────────────
 
-  function setTutorState(state) {
+  async function setTutorState(state) {
     const obsList    = document.getElementById('obs-list');
     const obsSection = document.getElementById('tutor-obs-section');
     if (!obsList || !state) return;
+
+    // Update active concept and re-render graph if index changed
+    const newIndex = state.current_concept_index ?? -1;
+    if (newIndex !== _activeConceptIndex) {
+      _activeConceptIndex = newIndex;
+      if (_ready) await _render();
+    }
+
+    // Update active concept indicator on bars
+    for (const c of _concepts) {
+      const b = _barEls[c.concept];
+      if (!b) continue;
+      const seqIdx = _sequence.indexOf(c.concept);
+      const isActive = seqIdx >= 0 && seqIdx === _activeConceptIndex;
+      b.fill.parentElement.parentElement
+        .querySelector('.bar-label').style.color = isActive ? '#e2e8f0' : '';
+      b.fill.parentElement.parentElement
+        .querySelector('.bar-label').style.fontWeight = isActive ? '700' : '';
+    }
 
     const understanding = state.student_understanding || [];
     const newItems = understanding.slice(_prevUnderstanding.length);
