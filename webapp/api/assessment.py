@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import anthropic
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -133,7 +133,6 @@ async def start_assessment(
 async def answer_question(
     session_id: str,
     body: AnswerRequest,
-    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AnswerAssessmentResponse:
@@ -169,12 +168,7 @@ async def answer_question(
     if current_row is None:
         raise HTTPException(status_code=409, detail="No open question to answer")
 
-    user_api_key: str | None = request.headers.get("X-API-Key") or None
-    client = (
-        anthropic.AsyncAnthropic(api_key=user_api_key)
-        if user_api_key
-        else request.app.state.anthropic_client
-    )
+    client = anthropic.AsyncAnthropic()  # reads ANTHROPIC_API_KEY from env
 
     # Classify the student's answer
     if current_row.question_index == 0:

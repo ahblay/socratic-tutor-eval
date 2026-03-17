@@ -66,10 +66,6 @@ async def client():
 # Helpers
 # ---------------------------------------------------------------------------
 
-# Dummy key used in all requests that require X-API-Key
-TEST_API_KEY = "sk-ant-test-key"
-
-
 async def _register(client, email="u@test.com", password="pw") -> str:
     r = await client.post("/api/auth/register", json={"email": email, "password": password, "consented": True})
     return r.json()["access_token"]
@@ -404,7 +400,7 @@ class TestTurnHotPath:
         r = await client.post(
             f"/api/sessions/{session_id}/turn",
             json={"message": "Hello"},
-            headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert r.status_code == 409
 
@@ -417,7 +413,7 @@ class TestTurnHotPath:
             r = await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "I think DNA is made of cells."},
-                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
+                headers={"Authorization": f"Bearer {token}"},
             )
         assert r.status_code == 200
         assert r.json()["reply"] == "What do you think?"
@@ -432,7 +428,7 @@ class TestTurnHotPath:
             await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "DNA is a molecule."},
-                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
+                headers={"Authorization": f"Bearer {token}"},
             )
 
         r = await client.get(
@@ -454,12 +450,12 @@ class TestTurnHotPath:
             await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "First message."},
-                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
+                headers={"Authorization": f"Bearer {token}"},
             )
             await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "Second message."},
-                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
+                headers={"Authorization": f"Bearer {token}"},
             )
 
         r = await client.get(
@@ -482,7 +478,7 @@ class TestTurnHotPath:
             r = await client.post(
                 f"/api/sessions/{session_id}/turn",
                 json={"message": "Hello?"},
-                headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
+                headers={"Authorization": f"Bearer {token}"},
             )
         assert r.status_code == 409
 
@@ -571,7 +567,7 @@ async def _answer(client, token, session_id, answer: str, mock_class: str = "par
         r = await client.post(
             f"/api/sessions/{session_id}/assessment/answer",
             json={"answer": answer},
-            headers={"Authorization": f"Bearer {token}", "X-API-Key": TEST_API_KEY},
+            headers={"Authorization": f"Bearer {token}"},
         )
     return r
 

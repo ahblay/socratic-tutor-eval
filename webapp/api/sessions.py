@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +27,6 @@ router = APIRouter()
 
 class CreateSessionRequest(BaseModel):
     article_id: str
-    max_turns: int = 50  # BYOK turn budget; None = unlimited
 
 
 class SessionResponse(BaseModel):
@@ -35,8 +34,6 @@ class SessionResponse(BaseModel):
     article_id: str
     status: str
     turn_count: int
-    max_turns: int | None
-    turns_remaining: int | None  # None if no budget set
 
 
 class TurnRequest(BaseModel):
@@ -96,7 +93,6 @@ async def create_session(
         user_id=user.id,
         article_id=article.id,
         status="active" if already_assessed else "pre_assessment",
-        max_turns=body.max_turns,
     )
     db.add(session)
     await db.commit()
@@ -118,7 +114,6 @@ async def get_session(
 @router.post("/{session_id}/open", response_model=TurnResponse)
 async def open_session(
     session_id: str,
-    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -145,13 +140,6 @@ async def open_session(
         if first_tutor:
             return TurnResponse(reply=first_tutor.content, turn_number=session.turn_count)
 
-    user_api_key: str | None = request.headers.get("X-API-Key") or None
-    if not user_api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Anthropic API key required. Send your key in the X-API-Key header.",
-        )
-
     article_result = await db.execute(
         select(Article).where(Article.id == session.article_id)
     )
@@ -161,7 +149,6 @@ async def open_session(
         topic=article.canonical_title,
         domain_map=article.domain_map,
         state=None,  # always fresh — no prior tutor state at session open
-        api_key=user_api_key,
     )
 
     # Build history: assessment Q&A (context) + synthetic opener trigger.
@@ -198,7 +185,6 @@ async def open_session(
 async def post_turn(
     session_id: str,
     body: TurnRequest,
-    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -217,13 +203,6 @@ async def post_turn(
         raise HTTPException(
             status_code=409,
             detail=f"Session is not active (status: {session.status})",
-        )
-
-    # Enforce turn budget
-    if session.max_turns is not None and session.turn_count >= session.max_turns:
-        raise HTTPException(
-            status_code=402,
-            detail=f"Turn budget exhausted ({session.max_turns} turns used)",
         )
 
     # Load the article for domain_map and topic
@@ -252,15 +231,11 @@ async def post_turn(
     history = assessment_hist + tutoring_hist
     history.append({"role": "student", "text": body.message})
 
-    # Extract user-supplied API key (BYOK); falls back to server env var if absent
-    user_api_key: str | None = request.headers.get("X-API-Key") or None
-
     # Reconstruct the tutor from saved state (None = fresh start)
     tutor = SocraticTutor(
         topic=article.canonical_title,
         domain_map=article.domain_map,
         state=session.tutor_state_snapshot,
-        api_key=user_api_key,
     )
 
     # Call respond() in a thread pool (sync Anthropic SDK)
@@ -380,18 +355,11 @@ async def get_transcript(
 # ---------------------------------------------------------------------------
 
 def _session_response(session: Session) -> SessionResponse:
-    turns_remaining = (
-        session.max_turns - session.turn_count
-        if session.max_turns is not None
-        else None
-    )
     return SessionResponse(
         session_id=session.id,
         article_id=session.article_id,
         status=session.status,
         turn_count=session.turn_count,
-        max_turns=session.max_turns,
-        turns_remaining=turns_remaining,
     )
 
 
