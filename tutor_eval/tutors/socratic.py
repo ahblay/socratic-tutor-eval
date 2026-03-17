@@ -74,8 +74,8 @@ what you wish they'd said.
 — through questions or scaffolding statements, but never by stating the correct answer.
 
 **Extend, don't confirm.** When the student gets something right — don't confirm the \
-answer. Ask what follows from it, or acknowledge their thinking neutrally without \
-validating the specific conclusion.
+specific answer. Acknowledge their thinking neutrally without validating the conclusion \
+("You mentioned X — tell me more about that"), then ask what follows from it.
 
 **Break down confusion.** If stuck, use the smallest question or simplest guiding \
 statement that isolates where they're lost.
@@ -225,10 +225,9 @@ Rules:
 # ---------------------------------------------------------------------------
 
 _RESPONSE_REVIEWER_PROMPT = """\
-You are a compliance checker for a Socratic tutoring session.
-The tutor has one absolute rule: NEVER give a direct answer, NEVER confirm a \
-specific answer, NEVER explain the answer — only ask questions or make \
-guiding statements that lead the student to discover the answer themselves.
+You are a strict gatekeeper for a Socratic tutoring system. Your sole job is to \
+evaluate whether a draft tutor response violates the Socratic method by giving a \
+direct answer.
 
 STUDENT MESSAGE:
 {student_message}
@@ -236,17 +235,48 @@ STUDENT MESSAGE:
 TUTOR RESPONSE:
 {tutor_response}
 
-Does the tutor response violate the rule by directly answering the student's \
-question, confirming a correct answer, or explaining what the answer is?
+## Direct violations (always fail):
+- States the correct answer explicitly ("The answer is X", "X is correct", \
+  "That's because Y")
+- Confirms the student is right ("Exactly!", "Yes, that's correct", "You've got it")
+- Corrects the student with the right information ("Actually, it's X", \
+  "You're close — it's really Y")
+- Provides an explanation or definition unprompted ("Z means X, which is why...")
+- Summarizes the content for the student
 
-If the response is compliant (purely Socratic — questions, hints, redirects): \
-respond with exactly: PASS
+## Subtle violations (also fail):
+- Leading questions that contain the answer ("Don't you think X is the case \
+  because of Y?")
+- Multiple-choice questions that reveal the answer set ("Is it A, B, or C?" \
+  where only one is plausible)
+- Affirming language that implies correctness ("Great observation! Now..." — \
+  implies the observation was correct)
+- Giving hints that contain the answer ("Think about what happens when \
+  temperature rises...")
+- Working through a similar example to demonstrate the method — the student \
+  must construct examples themselves, not watch one being solved
 
-If the response is non-compliant: respond with exactly: FAIL: followed by a \
-revised version that is fully Socratic — no direct answer, no confirmation, \
-only a question or guiding statement that leads the student to think it through.
+## What is allowed (always pass):
+- Open-ended questions about the student's own thinking
+- Requests for examples, definitions, or elaboration from the student
+- Questions that expose contradictions without revealing what the contradiction \
+  resolves to
+- Neutral acknowledgments that don't imply correctness \
+  ("You mentioned X — tell me more about that")
+- Asking the student to relate two concepts without indicating how they relate
 
-Respond with PASS or FAIL: <revised response> only. No other text."""
+## Your output
+
+Respond with ONLY a JSON object in this exact format:
+
+If the response passes:
+{{"verdict": "pass"}}
+
+If the response fails:
+{{"verdict": "fail", "violation": "brief description of what rule was broken", \
+"suggestion": "a rewritten version that asks a question instead"}}
+
+Do not include any text outside the JSON object."""
 
 # ---------------------------------------------------------------------------
 # Accuracy reviewer prompt (hardcoded from accuracy-reviewer.md)
@@ -709,13 +739,13 @@ class SocraticTutor(AbstractTutor):
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}],
             )
-            verdict = result.content[0].text.strip()
-            if verdict.startswith("FAIL:"):
-                revised = verdict[len("FAIL:"):].strip()
-                if revised:
+            data = json.loads(result.content[0].text.strip())
+            if data.get("verdict") == "fail":
+                suggestion = data.get("suggestion", "").strip()
+                if suggestion:
                     print("  [response-reviewer] non-compliant response rewritten",
                           file=sys.stderr)
-                    return revised
+                    return suggestion
         except Exception as e:
             print(f"  [response-reviewer] silently failed: {e}", file=sys.stderr)
         return reply
