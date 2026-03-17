@@ -219,6 +219,38 @@ input:focus { border-color: var(--accent); }
 }
 .turns-chip.low { color: var(--warn); }
 
+/* ── Catalog ── */
+.catalog-card {
+  max-width: 600px;
+}
+
+#catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  margin-bottom: .75rem;
+}
+
+.catalog-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .75rem 1rem;
+  text-align: left;
+  transition: border-color .15s;
+  cursor: pointer;
+  gap: .15rem;
+}
+.catalog-item:hover  { border-color: var(--accent); }
+.catalog-item.selected { border-color: var(--accent); background: #1e3a5f22; }
+
+.catalog-title   { font-weight: 600; font-size: .95rem; color: var(--text); }
+.catalog-meta    { font-size: .78rem; color: var(--accent); }
+.catalog-summary { font-size: .83rem; color: var(--text-dim); line-height: 1.4; }
+
 /* ── Article card ── */
 .article-card {
   margin-top: 1.25rem;

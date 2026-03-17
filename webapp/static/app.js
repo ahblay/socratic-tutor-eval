@@ -163,64 +163,50 @@ const App = (() => {
   }
 
   // ------------------------------------------------------------------
-  // Article phase
+  // Article / catalog phase
   // ------------------------------------------------------------------
 
   function _wireArticlePhase() {
     document.getElementById("btn-logout").addEventListener("click", Auth.logout);
-
-    document.getElementById("form-article").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      await _handleArticleSubmit();
-    });
-
-    document.getElementById("btn-start-session").addEventListener("click", async () => {
-      await _handleStartSession();
-    });
+    document.getElementById("btn-start-session").addEventListener("click", _handleStartSession);
+    _loadCatalog();
   }
 
-  async function _handleArticleSubmit() {
-    const urlInput  = document.getElementById("inp-url").value.trim();
+  async function _loadCatalog() {
+    const loadingEl = document.getElementById("catalog-loading");
+    const emptyEl   = document.getElementById("catalog-empty");
     const errorEl   = document.getElementById("article-error");
-    const pollingEl = document.getElementById("article-polling");
     const cardEl    = document.getElementById("article-card");
 
     errorEl.classList.add("hidden");
     cardEl.classList.add("hidden");
-    pollingEl.classList.add("hidden");
-
-    if (!urlInput) {
-      errorEl.textContent = "Please enter a Wikipedia URL or article title.";
-      errorEl.classList.remove("hidden");
-      return;
-    }
-
-    document.getElementById("btn-resolve").disabled = true;
+    emptyEl.classList.add("hidden");
+    loadingEl.classList.remove("hidden");
+    AppState.articleId = null;
+    document.getElementById("btn-start-session").disabled = true;
 
     try {
-      const article = await Article.resolve(urlInput);
-      AppState.articleId      = article.article_id;
-      AppState.articleTitle   = article.title;
-      AppState.articleSummary = article.summary || "";
-
-      if (article.domain_map_status === "ready") {
-        const full = await Article.get(article.article_id);
-        AppState.kcCount = full.kc_count || 0;
-        Article.renderCard({ ...article, kc_count: AppState.kcCount });
+      const articles = await apiFetch("/api/articles");
+      loadingEl.classList.add("hidden");
+      if (articles.length === 0) {
+        emptyEl.classList.remove("hidden");
       } else {
-        pollingEl.classList.remove("hidden");
-        const full = await Article.poll(article.article_id);
-        pollingEl.classList.add("hidden");
-        AppState.kcCount = full.kc_count || 0;
-        Article.renderCard(full);
+        Article.renderCatalog(articles, _onArticleSelected);
       }
     } catch (e) {
-      pollingEl.classList.add("hidden");
+      loadingEl.classList.add("hidden");
       errorEl.textContent = e.message;
       errorEl.classList.remove("hidden");
-    } finally {
-      document.getElementById("btn-resolve").disabled = false;
     }
+  }
+
+  function _onArticleSelected(article) {
+    AppState.articleId      = article.article_id;
+    AppState.articleTitle   = article.title;
+    AppState.articleSummary = article.summary || "";
+    AppState.kcCount        = article.kc_count || 0;
+    Article.renderCard(article);
+    document.getElementById("btn-start-session").disabled = false;
   }
 
   async function _handleStartSession() {
@@ -395,13 +381,6 @@ const App = (() => {
     AppState.sessionStatus  = null;
     AppState.turnCount      = 0;
 
-    // Reset article form UI
-    document.getElementById("inp-url").value       = "";
-    document.getElementById("article-error").classList.add("hidden");
-    document.getElementById("article-card").classList.add("hidden");
-    document.getElementById("article-polling").classList.add("hidden");
-    document.getElementById("btn-resolve").disabled = false;
-    document.getElementById("btn-start-session").disabled = false;
     document.getElementById("btn-end-session").classList.add("hidden");
 
     // Remove old turn handler to avoid duplicate listeners
@@ -409,6 +388,7 @@ const App = (() => {
     form.replaceWith(form.cloneNode(true));
 
     transition("article");
+    _loadCatalog();
   }
 
   return { init, transition, showError, startTutoring };

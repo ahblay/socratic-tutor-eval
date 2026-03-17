@@ -41,33 +41,32 @@
     </div>
   </section>
 
-  <!-- ── ARTICLE INPUT ── -->
+  <!-- ── LESSON CATALOG ── -->
   <section id="phase-article" class="phase">
     <header class="top-bar">
       <span class="brand">Socratic Tutor</span>
       <button id="btn-logout" class="btn-link small">Sign out</button>
     </header>
-    <div class="card">
-      <h2>Choose an article</h2>
-      <p class="hint">Paste a Wikipedia URL or article title.</p>
-      <form id="form-article">
-        <input id="inp-url" type="text"
-               placeholder="https://en.wikipedia.org/wiki/..."
-               autocomplete="off" spellcheck="false">
-        <button type="submit" id="btn-resolve" class="btn-primary">Analyse article →</button>
-      </form>
+    <div class="card catalog-card">
+      <h2>Choose a lesson</h2>
+      <p class="hint">Select a topic to begin a Socratic tutoring session.</p>
+
       <p id="article-error" class="error-msg hidden"></p>
 
-      <div id="article-polling" class="hidden">
+      <div id="catalog-loading">
         <div class="spinner"></div>
-        <p class="polling-msg">Analysing article<span class="dots"></span></p>
+        <p class="polling-msg">Loading lessons…</p>
       </div>
+
+      <p id="catalog-empty" class="hint hidden">No lessons are available yet. Check back soon.</p>
+
+      <div id="catalog-list"></div>
 
       <div id="article-card" class="article-card hidden">
         <h3 id="article-title"></h3>
         <p id="article-summary" class="summary-text"></p>
         <p id="article-kc-count" class="meta"></p>
-        <button id="btn-start-session" class="btn-primary">Begin session →</button>
+        <button id="btn-start-session" class="btn-primary" disabled>Begin session →</button>
       </div>
     </div>
   </section>

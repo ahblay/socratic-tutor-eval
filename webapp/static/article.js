@@ -1,9 +1,42 @@
 /**
- * article.js — Wikipedia article resolution and domain map polling.
+ * article.js — Lesson catalog and article helpers.
  */
 
 const Article = (() => {
   let _pollInterval = null;
+
+  /** Fetch the published lesson catalog (no auth required). */
+  async function list() {
+    return apiFetch("/api/articles");
+  }
+
+  /**
+   * Render catalog items into #catalog-list.
+   * onSelect(article) is called when the user picks one.
+   */
+  function renderCatalog(articles, onSelect) {
+    const listEl = document.getElementById("catalog-list");
+    listEl.innerHTML = "";
+    articles.forEach(a => {
+      const btn = document.createElement("button");
+      btn.className = "catalog-item";
+      const summary = (a.summary || "").slice(0, 120) + (a.summary && a.summary.length > 120 ? "…" : "");
+      btn.innerHTML =
+        `<span class="catalog-title">${_esc(a.title)}</span>` +
+        `<span class="catalog-meta">${a.kc_count} concept${a.kc_count !== 1 ? "s" : ""}</span>` +
+        `<span class="catalog-summary">${_esc(summary)}</span>`;
+      btn.addEventListener("click", () => {
+        listEl.querySelectorAll(".catalog-item").forEach(el => el.classList.remove("selected"));
+        btn.classList.add("selected");
+        onSelect(a);
+      });
+      listEl.appendChild(btn);
+    });
+  }
+
+  function _esc(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
 
   async function resolve(urlOrTitle) {
     const data = await apiFetch("/api/articles/resolve", {
@@ -66,5 +99,5 @@ const Article = (() => {
     document.getElementById("article-card").classList.remove("hidden");
   }
 
-  return { resolve, get, poll, cancelPoll, renderCard };
+  return { list, renderCatalog, resolve, get, poll, cancelPoll, renderCard };
 })();
