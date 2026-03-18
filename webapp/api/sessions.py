@@ -80,6 +80,10 @@ async def create_session(
     if existing is not None:
         return _session_response(existing)
 
+    # Credit check — only for new sessions (resume bypasses this)
+    if not user.is_superuser and user.credits_remaining <= 0:
+        raise HTTPException(status_code=402, detail="No credits remaining")
+
     # Skip assessment if BKT state already exists for this user+article
     bkt_result = await db.execute(
         select(BKTStateRow).where(
@@ -205,6 +209,10 @@ async def post_turn(
             detail=f"Session is not active (status: {session.status})",
         )
 
+    # Credit check — superusers are exempt
+    if not user.is_superuser and user.credits_remaining <= 0:
+        raise HTTPException(status_code=402, detail="No credits remaining")
+
     # Load the article for domain_map and topic
     article_result = await db.execute(
         select(Article).where(Article.id == session.article_id)
@@ -273,6 +281,10 @@ async def post_turn(
     session.tutor_state_snapshot = tutor_state
     session.total_input_tokens += usage.get("input_tokens", 0)
     session.total_output_tokens += usage.get("output_tokens", 0)
+
+    # Deduct one credit (committed atomically with the turn rows above)
+    if not user.is_superuser:
+        user.credits_remaining -= 1
 
     await db.commit()
 
