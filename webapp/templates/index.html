@@ -61,13 +61,6 @@
       <p id="catalog-empty" class="hint hidden">No lessons are available yet. Check back soon.</p>
 
       <div id="catalog-list"></div>
-
-      <div id="article-card" class="article-card hidden">
-        <h3 id="article-title"></h3>
-        <p id="article-summary" class="summary-text"></p>
-        <p id="article-kc-count" class="meta"></p>
-        <button id="btn-start-session" class="btn-primary" disabled>Begin session →</button>
-      </div>
     </div>
   </section>
 
@@ -75,7 +68,7 @@
   <section id="phase-chat" class="phase">
     <header class="top-bar">
       <div class="top-bar-left">
-        <span class="brand">Socratic Tutor</span>
+        <button id="btn-back-catalog" class="btn-link small">← Lessons</button>
         <span id="chat-topic" class="topic-chip"></span>
       </div>
       <div class="top-bar-right">
@@ -98,14 +91,14 @@
       <div id="chat-panel">
         <div id="chat-messages" role="log" aria-live="polite"></div>
 
-        <div id="tutor-obs-section" class="obs-section hidden">
-          <div class="obs-title">Tutor observations</div>
-          <div class="obs-list" id="obs-list"></div>
-        </div>
+        <div id="obs-resize-handle" class="resize-handle-h hidden"></div>
 
-        <div class="mastery-section">
-          <div class="knowledge-title">Student knowledge (tutor's estimate)</div>
-          <div id="kg-bars"></div>
+        <div id="tutor-obs-section" class="obs-section hidden">
+          <div class="obs-header">
+            <div class="obs-title">Tutor observations</div>
+            <button id="btn-obs-toggle" class="btn-obs-toggle">Show all</button>
+          </div>
+          <div class="obs-list" id="obs-list"></div>
         </div>
 
         <div id="thinking" class="thinking-bar hidden">

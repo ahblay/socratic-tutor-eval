@@ -20,14 +20,15 @@ const Article = (() => {
     articles.forEach(a => {
       const btn = document.createElement("button");
       btn.className = "catalog-item";
-      const summary = (a.summary || "").slice(0, 120) + (a.summary && a.summary.length > 120 ? "…" : "");
       btn.innerHTML =
         `<span class="catalog-title">${_esc(a.title)}</span>` +
         `<span class="catalog-meta">${a.kc_count} concept${a.kc_count !== 1 ? "s" : ""}</span>` +
-        `<span class="catalog-summary">${_esc(summary)}</span>`;
+        `<span class="catalog-summary">${_esc(a.summary || "")}</span>`;
       btn.addEventListener("click", () => {
-        listEl.querySelectorAll(".catalog-item").forEach(el => el.classList.remove("selected"));
-        btn.classList.add("selected");
+        listEl.querySelectorAll(".catalog-item").forEach(el => {
+          el.classList.remove("selected", "loading");
+        });
+        btn.classList.add("selected", "loading");
         onSelect(a);
       });
       listEl.appendChild(btn);

@@ -168,7 +168,6 @@ const App = (() => {
 
   function _wireArticlePhase() {
     document.getElementById("btn-logout").addEventListener("click", Auth.logout);
-    document.getElementById("btn-start-session").addEventListener("click", _handleStartSession);
     _loadCatalog();
   }
 
@@ -176,14 +175,11 @@ const App = (() => {
     const loadingEl = document.getElementById("catalog-loading");
     const emptyEl   = document.getElementById("catalog-empty");
     const errorEl   = document.getElementById("article-error");
-    const cardEl    = document.getElementById("article-card");
 
     errorEl.classList.add("hidden");
-    cardEl.classList.add("hidden");
     emptyEl.classList.add("hidden");
     loadingEl.classList.remove("hidden");
     AppState.articleId = null;
-    document.getElementById("btn-start-session").disabled = true;
 
     try {
       const articles = await apiFetch("/api/articles");
@@ -205,14 +201,12 @@ const App = (() => {
     AppState.articleTitle   = article.title;
     AppState.articleSummary = article.summary || "";
     AppState.kcCount        = article.kc_count || 0;
-    Article.renderCard(article);
-    document.getElementById("btn-start-session").disabled = false;
+    _handleStartSession();
   }
 
   async function _handleStartSession() {
     const errorEl = document.getElementById("article-error");
     errorEl.classList.add("hidden");
-    document.getElementById("btn-start-session").disabled = true;
 
     try {
       const session = await apiFetch("/api/sessions", {
@@ -227,7 +221,8 @@ const App = (() => {
     } catch (e) {
       errorEl.textContent = e.message;
       errorEl.classList.remove("hidden");
-      document.getElementById("btn-start-session").disabled = false;
+      // Clear loading state on all cards so user can retry
+      document.querySelectorAll(".catalog-item.loading").forEach(el => el.classList.remove("loading"));
     }
   }
 
@@ -240,8 +235,9 @@ const App = (() => {
     Chat.clearMessages();
     Chat.setTopic(AppState.articleTitle || "");
 
-    document.getElementById("btn-logout2").addEventListener("click", Auth.logout);
-    document.getElementById("btn-end-session").addEventListener("click", _endSession);
+    document.getElementById("btn-logout2").onclick     = Auth.logout;
+    document.getElementById("btn-end-session").onclick  = _endSession;
+    document.getElementById("btn-back-catalog").onclick = _backToCatalog;
 
     // Enter submits; Shift+Enter inserts newline
     document.getElementById("inp-chat").addEventListener("keydown", (e) => {
@@ -253,6 +249,9 @@ const App = (() => {
 
     // Load graph state (domain map + BKT snapshot) and initialise graph panel
     _loadGraphState();
+
+    // Wire obs panel resize handle and show-all toggle
+    _wireObsPanel();
 
     Chat.lockInput();
     if (AppState.sessionStatus === "active") {
@@ -359,6 +358,21 @@ const App = (() => {
     }
   }
 
+  function _backToCatalog() {
+    // Clear session state — session stays open on the backend (resumable)
+    AppState.sessionId     = null;
+    AppState.sessionStatus = null;
+    AppState.articleId     = null;
+    AppState.articleTitle  = null;
+    AppState.domainMap     = null;
+    AppState.bktSnapshot   = null;
+    KCGraph.init(null);
+    document.getElementById("tutor-obs-section").classList.add("hidden");
+    document.getElementById("obs-resize-handle").classList.add("hidden");
+    transition("article");
+    _loadCatalog();
+  }
+
   async function _endSession() {
     document.getElementById("btn-end-session").classList.add("hidden");
     Chat.lockInput();
@@ -389,6 +403,62 @@ const App = (() => {
 
     transition("article");
     _loadCatalog();
+  }
+
+  // ------------------------------------------------------------------
+  // Obs panel: resize handle + show-all toggle
+  // ------------------------------------------------------------------
+
+  function _wireObsPanel() {
+    const handle     = document.getElementById('obs-resize-handle');
+    const obsSection = document.getElementById('tutor-obs-section');
+    const chatMsgs   = document.getElementById('chat-messages');
+    const obsList    = document.getElementById('obs-list');
+    const btnToggle  = document.getElementById('btn-obs-toggle');
+    if (!handle || !obsSection || !chatMsgs || !obsList || !btnToggle) return;
+
+    function _setExpanded(expanded, maxH) {
+      if (expanded) {
+        const panelH = chatMsgs.parentElement.getBoundingClientRect().height;
+        const h = maxH ?? Math.min(200, Math.floor(panelH * 0.4));
+        obsList.style.maxHeight = h + 'px';
+        obsList.classList.add('expanded');
+        btnToggle.textContent = 'Show less';
+      } else {
+        obsList.classList.remove('expanded');
+        btnToggle.textContent = 'Show all';
+      }
+    }
+
+    // Show-all toggle
+    btnToggle.addEventListener('click', () => {
+      _setExpanded(!obsList.classList.contains('expanded'));
+    });
+
+    // Drag-to-resize: dragging up increases the expanded obs-list max-height
+    let _startY = 0;
+    let _startH = 0;
+
+    handle.addEventListener('mousedown', (e) => {
+      _startY = e.clientY;
+      _startH = obsList.getBoundingClientRect().height;
+      handle.classList.add('dragging');
+      document.addEventListener('mousemove', _onObsDrag);
+      document.addEventListener('mouseup',   _stopObsDrag);
+    });
+
+    function _onObsDrag(e) {
+      const delta  = _startY - e.clientY;   // drag up → increase height
+      const panelH = chatMsgs.parentElement.getBoundingClientRect().height;
+      const newH   = Math.max(24, Math.min(_startH + delta, panelH - 120));
+      _setExpanded(newH > 30, newH);
+    }
+
+    function _stopObsDrag() {
+      handle.classList.remove('dragging');
+      document.removeEventListener('mousemove', _onObsDrag);
+      document.removeEventListener('mouseup',   _stopObsDrag);
+    }
   }
 
   return { init, transition, showError, startTutoring };

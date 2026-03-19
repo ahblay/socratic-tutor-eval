@@ -11,7 +11,7 @@ const KCGraph = (() => {
   let _panZoom            = null;   // svg-pan-zoom instance
   let _concepts           = [];
   let _sequence           = [];     // recommended_sequence from domain map
-  let _barEls             = {};
+  let _barEls             = {};  // kept for API compatibility but unused
   let _ready              = false;
   let _bktSnapshot        = {};
   let _activeConceptIndex = -1;     // current_concept_index from tutor state
@@ -89,13 +89,16 @@ const KCGraph = (() => {
       const fill  = knowledgeColor(p);
       const label = wrapLabel(c.concept);
       // Active: tutor is currently working on this concept
-      const isActive   = activeConceptName && c.concept === activeConceptName;
-      // Frontier: all prerequisites are mastered but this one isn't
-      const isFrontier = !isActive &&
-        !isMastered(c.concept, bktSnapshot, concepts) &&
-        (prereqsOf(c.concept, concepts)).every(p => isMastered(p, bktSnapshot, concepts));
-      const borderColor = isActive ? '#ffffff' : (isFrontier ? '#f59e0b' : '#3b82f6');
-      const penWidth    = isActive ? '3.5'    : (isFrontier ? '2.5'    : '1.5');
+      const isActive  = activeConceptName && c.concept === activeConceptName;
+      const seqIdx    = _sequence.indexOf(c.concept);
+      // Covered: concept appears before the active index in the sequence
+      const isCovered  = !isActive && seqIdx >= 0 && seqIdx < _activeConceptIndex;
+      const borderColor = isActive   ? '#ffffff'
+                        : isCovered  ? '#22c55e'
+                        :              '#3b82f6';
+      const penWidth    = isActive   ? '3.5'
+                        : isCovered  ? '2.0'
+                        :              '1.5';
       lines.push(
         `  "${id}" [label="${label}", fillcolor="${fill}",` +
         ` color="${borderColor}", penwidth=${penWidth}];`
@@ -182,9 +185,7 @@ const KCGraph = (() => {
     _activeConceptIndex = -1;
     _prevUnderstanding  = [];
 
-    const barsEl  = document.getElementById('kg-bars');
     const obsList = document.getElementById('obs-list');
-    if (barsEl)  barsEl.innerHTML  = '';
     if (obsList) obsList.innerHTML = '';
 
     if (_concepts.length === 0) return;
@@ -195,25 +196,6 @@ const KCGraph = (() => {
     }
 
     await _render();
-
-    // Build mastery bars
-    for (const c of _concepts) {
-      const safeId = slugify(c.concept);
-      const row = document.createElement('div');
-      row.className = 'bar-row';
-      row.innerHTML =
-        `<span class="bar-label" title="${c.concept}">${c.concept}</span>` +
-        `<div class="bar-track">` +
-          `<div class="bar-fill" id="kgbar-${safeId}" style="width:0%;background:#334155"></div>` +
-        `</div>` +
-        `<span class="bar-val" id="kgbarval-${safeId}">—</span>`;
-      barsEl.appendChild(row);
-      _barEls[c.concept] = {
-        fill: document.getElementById(`kgbar-${safeId}`),
-        val:  document.getElementById(`kgbarval-${safeId}`),
-      };
-    }
-
     _ready = true;
   }
 
@@ -221,17 +203,6 @@ const KCGraph = (() => {
 
   async function setBKT(bktSnapshot) {
     _bktSnapshot = bktSnapshot || {};
-
-    for (const c of _concepts) {
-      const b = _barEls[c.concept];
-      if (!b) continue;
-      const p   = _bktSnapshot[slugify(c.concept)] ?? 0;
-      const pct = Math.round(p * 100);
-      b.fill.style.width      = pct + '%';
-      b.fill.style.background = knowledgeColor(p);
-      b.val.textContent       = pct + '%';
-    }
-
     if (_ready) await _render();
   }
 
@@ -247,18 +218,6 @@ const KCGraph = (() => {
     if (newIndex !== _activeConceptIndex) {
       _activeConceptIndex = newIndex;
       if (_ready) await _render();
-    }
-
-    // Update active concept indicator on bars
-    for (const c of _concepts) {
-      const b = _barEls[c.concept];
-      if (!b) continue;
-      const seqIdx = _sequence.indexOf(c.concept);
-      const isActive = seqIdx >= 0 && seqIdx === _activeConceptIndex;
-      b.fill.parentElement.parentElement
-        .querySelector('.bar-label').style.color = isActive ? '#e2e8f0' : '';
-      b.fill.parentElement.parentElement
-        .querySelector('.bar-label').style.fontWeight = isActive ? '700' : '';
     }
 
     const understanding = state.student_understanding || [];
@@ -291,7 +250,11 @@ const KCGraph = (() => {
       obsList.appendChild(chip);
     }
 
-    if (obsSection) obsSection.classList.remove('hidden');
+    if (obsSection) {
+      obsSection.classList.remove('hidden');
+      const resizeHandle = document.getElementById('obs-resize-handle');
+      if (resizeHandle) resizeHandle.classList.remove('hidden');
+    }
   }
 
   return { init, setBKT, setTutorState };

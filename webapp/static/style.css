@@ -244,8 +244,9 @@ input:focus { border-color: var(--accent); }
   cursor: pointer;
   gap: .15rem;
 }
-.catalog-item:hover  { border-color: var(--accent); }
+.catalog-item:hover    { border-color: var(--accent); }
 .catalog-item.selected { border-color: var(--accent); background: #1e3a5f22; }
+.catalog-item.loading  { opacity: .6; pointer-events: none; cursor: wait; }
 
 .catalog-title   { font-weight: 600; font-size: .95rem; color: var(--text); }
 .catalog-meta    { font-size: .78rem; color: var(--accent); }
@@ -319,11 +320,29 @@ input:focus { border-color: var(--accent); }
   scroll-behavior: smooth;
 }
 
+/* ── Resize handle ── */
+.resize-handle-h {
+  height: 5px;
+  cursor: ns-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.resize-handle-h:hover,
+.resize-handle-h.dragging { background: var(--accent); }
+
 /* ── Observation chips ── */
 .obs-section {
-  padding: 6px 12px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  min-height: 0;
+}
+
+.obs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 12px 3px;
 }
 
 .obs-title {
@@ -332,14 +351,35 @@ input:focus { border-color: var(--accent); }
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: .08em;
-  margin-bottom: 5px;
 }
+
+.btn-obs-toggle {
+  font-size: 10px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--font);
+}
+.btn-obs-toggle:hover { color: var(--accent-hi); }
 
 .obs-list {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  min-height: 18px;
+  padding: 0 12px 6px;
+  overflow: hidden;
+}
+
+/* Default: show only the most recent chip */
+.obs-list:not(.expanded) .obs-chip:not(:last-child) {
+  display: none;
+}
+
+/* Expanded: show all chips and allow scrolling */
+.obs-list.expanded {
+  overflow-y: auto;
 }
 
 .obs-chip {
@@ -347,64 +387,8 @@ input:focus { border-color: var(--accent); }
   padding: 2px 8px;
   border-radius: 99px;
   font-weight: 600;
-}
-
-/* ── Mastery bars ── */
-.mastery-section {
-  padding: 6px 12px 8px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-  flex-shrink: 0;
-  max-height: 140px;
-  overflow-y: auto;
-}
-
-.mastery-title, .knowledge-title {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  margin-bottom: 5px;
-}
-
-.bar-row {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-bottom: 3px;
-}
-
-.bar-label {
-  font-size: 10px;
-  color: var(--text-dim);
-  width: 120px;
-  flex-shrink: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.bar-track {
-  flex: 1;
-  background: var(--surface);
-  border-radius: 99px;
-  height: 7px;
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  border-radius: 99px;
-  transition: width .5s ease, background .5s ease;
-}
-
-.bar-val {
-  font-size: 10px;
-  color: var(--muted);
-  width: 30px;
-  text-align: right;
-  flex-shrink: 0;
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* ── Bubbles ── */
