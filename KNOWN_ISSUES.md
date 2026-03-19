@@ -23,3 +23,18 @@ Domain map generation makes two sequential LLM calls (Sonnet domain mapper + Hai
 - In `_fix_prerequisite_references`, catch its own exceptions and return the original domain map on any failure rather than propagating.
 
 ---
+
+## KI-002 — Prerequisite gap handling is a system prompt patch (no tangent explorer)
+
+**Area:** `tutor_eval/tutors/socratic.py` — `_SYSTEM_PROMPT`
+**Severity:** Low — functional workaround in place
+
+### Description
+The plugin architecture includes a dedicated tangent-explorer subagent that intercepts when the tutor detects a prerequisite gap or off-curriculum tangent, handles it via a focused sub-dialogue, and returns control to the main lesson. This subagent has not been ported to the webapp/SDK implementation.
+
+In its absence, the tutor's system prompt contains a direct instruction to handle prerequisite gaps by going further down rather than skipping and explaining ("When you encounter a prerequisite gap, go further down — do not skip it by explaining the higher concept"). This closes the most common failure mode but does not replicate the full tangent-explorer capability, which can conduct a separate contextual dialogue to build the missing prerequisite before resuming.
+
+### Suggested fix
+Port the tangent-explorer logic as a second `SocraticTutor`-like class or as a detection + sub-session mechanism in `webapp/api/sessions.py`.
+
+---

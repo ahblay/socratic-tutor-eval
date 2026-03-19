@@ -170,7 +170,8 @@ answer. Ask what follows from it, or acknowledge their thinking neutrally withou
 validating the specific conclusion.
 
 **Break down confusion.** If stuck, use the smallest question or simplest guiding \
-statement that isolates where they're lost.
+statement that isolates where they're lost. When you encounter a prerequisite gap, \
+go further down — do not skip it by explaining the higher concept.
 
 **Identify skills, not just facts.** You are helping the student develop the ability \
 to reason through this domain, not memorize answers. Responses should require the \
@@ -215,6 +216,7 @@ completely unmoved by pressure.
 - If the student is frustrated, acknowledge the difficulty of the work without \
   offering relief from it: *"This is genuinely hard — what part feels most stuck right now?"*
 - Never condescending — prefer "What's your reasoning there?" over "Are you sure?"
+- You do not need to affirm the student's responses. Be kind but direct. Do not be effusive.
 
 ---
 
@@ -570,8 +572,8 @@ class SocraticTutor(AbstractTutor):
         # Extract <state_update> block, apply to _state, return clean text
         clean_reply = self._extract_and_apply_state_update(raw_reply)
 
-        # Guardrail: verify response is Socratic; rewrite in-place if not
-        reply = self._enforce_socratic(student_message, clean_reply)
+        # Guardrail: verify response is Socratic; reprompt tutor if not
+        reply = self._enforce_socratic(student_message, clean_reply, messages, system)
 
         return reply
 
@@ -746,15 +748,23 @@ class SocraticTutor(AbstractTutor):
     # Response guardrail
     # ------------------------------------------------------------------
 
-    def _enforce_socratic(self, student_message: str, reply: str) -> str:
+    def _enforce_socratic(
+        self,
+        student_message: str,
+        reply: str,
+        messages: list,
+        system: list,
+    ) -> str:
         """
-        Check the tutor's reply for direct answers. If non-compliant, the
-        reviewer rewrites it in the same call. Uses Haiku for low latency.
+        Check the tutor's reply for direct answers. On FAIL, reprompt the
+        Socratic tutor (one retry) so it self-corrects. Uses Haiku for the
+        review check; Sonnet for the correction.
         """
         prompt = _RESPONSE_REVIEWER_PROMPT.format(
             student_message=student_message,
             tutor_response=reply,
         )
+        raw = ""
         try:
             result = self.client.messages.create(
                 model="claude-haiku-4-5-20251001",
@@ -765,17 +775,50 @@ class SocraticTutor(AbstractTutor):
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
             data = json.loads(raw)
-            if data.get("verdict") == "fail":
-                print(
-                    f"  [response-reviewer] FAIL — {data.get('violation', '?')}",
-                    file=sys.stderr,
-                )
-            else:
+
+            if data.get("verdict") != "fail":
                 print("  [response-reviewer] pass", file=sys.stderr)
+                return reply
+
+            violation = data.get("violation", "unspecified violation")
+            print(f"  [response-reviewer] FAIL — {violation}", file=sys.stderr)
+
+            # Reprompt the Socratic tutor with violation feedback
+            correction_messages = messages + [
+                {"role": "assistant", "content": reply},
+                {
+                    "role": "user",
+                    "content": (
+                        f"[Response reviewer]: Your response violated the Socratic method. "
+                        f"Violation: {violation}. "
+                        f"Please try again — ask a question that narrows scope without "
+                        f"providing information, explanations, or confirmation."
+                    ),
+                },
+            ]
+            correction = self.client.messages.create(
+                model=self.model,
+                max_tokens=1024,
+                system=system,
+                messages=correction_messages,
+            )
+            corrected = next(
+                block.text for block in correction.content if block.type == "text"
+            ).strip()
+            # Strip any state_update block without applying it (state already updated)
+            corrected = re.sub(
+                r"<state_update>.*?</state_update>", "", corrected, flags=re.DOTALL
+            ).strip()
+            print("  [response-reviewer] correction accepted", file=sys.stderr)
+            return corrected
+
         except Exception as e:
-            raw_preview = repr(raw[:200]) if "raw" in locals() else "no response captured"
-            print(f"  [response-reviewer] failed: {e} | raw: {raw_preview}", file=sys.stderr)
-        return reply
+            raw_preview = repr(raw[:200]) if raw else "no response captured"
+            print(
+                f"  [response-reviewer] failed: {e} | raw: {raw_preview}",
+                file=sys.stderr,
+            )
+            return reply
 
 
 # ---------------------------------------------------------------------------
