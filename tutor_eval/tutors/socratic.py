@@ -494,6 +494,7 @@ class SocraticTutor(AbstractTutor):
         self.client = anthropic.Anthropic(api_key=api_key or None)
 
         self._last_raw_response: str | None = None
+        self._last_thinking: str | None = None
         self._last_usage: dict | None = None  # {"input_tokens": int, "output_tokens": int}
 
         if state is not None:
@@ -543,14 +544,24 @@ class SocraticTutor(AbstractTutor):
         response = self.client.messages.create(
             model=self.model,
             max_tokens=2048,
+            thinking={"type": "enabled", "budget_tokens": 1024},
             system=system,
             messages=messages,
         )
 
-        raw_reply = response.content[0].text.strip()
+        # With extended thinking the response contains a ThinkingBlock followed
+        # by a TextBlock — extract each by type.
+        raw_reply = next(
+            block.text for block in response.content if block.type == "text"
+        ).strip()
+        thinking_content = next(
+            (block.thinking for block in response.content if block.type == "thinking"),
+            None,
+        )
 
-        # Store raw response and token usage before any processing
+        # Store raw response, thinking, and token usage before any processing
         self._last_raw_response = raw_reply
+        self._last_thinking = thinking_content
         self._last_usage = {
             "input_tokens": response.usage.input_tokens,
             "output_tokens": response.usage.output_tokens,
