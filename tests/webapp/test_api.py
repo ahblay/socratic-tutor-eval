@@ -588,7 +588,8 @@ async def _start_assessment(client, token, session_id) -> str:
 
 async def _answer(client, token, session_id, answer: str, mock_class: str = "partial"):
     with patch("webapp.api.assessment.classify_opener_answer", return_value=mock_class), \
-         patch("webapp.api.assessment.classify_assessment_answer", return_value=mock_class):
+         patch("webapp.api.assessment.generate_followup_question", return_value="Tell me more."), \
+         patch("webapp.api.assessment.classify_full_assessment", return_value={}):
         r = await client.post(
             f"/api/sessions/{session_id}/assessment/answer",
             json={"answer": answer},
@@ -677,7 +678,7 @@ class TestAssessment:
         assert data["question_text"] is not None
         assert data["observation_class"] == "partial"
 
-    async def test_answer_opener_mastered_limits_to_one_followup(self, client):
+    async def test_answer_opener_issues_followup(self, client):
         token = await _register(client)
         article_id = await _resolve_rich_article(client)
         session_id = await _create_session(client, token, article_id)
@@ -685,11 +686,9 @@ class TestAssessment:
 
         r = await _answer(client, token, session_id, "I know DNA well.", mock_class="mastered")
         assert r.status_code == 200
+        # Opener answer should issue a follow-up (not complete assessment immediately)
         assert r.json()["assessment_complete"] is False
-
-        # One follow-up issued; answering it should complete the assessment
-        r2 = await _answer(client, token, session_id, "Nucleotides are...", mock_class="mastered")
-        assert r2.json()["assessment_complete"] is True
+        assert r.json()["question_text"] == "Tell me more."
 
     async def test_answer_saves_observation_class(self, client):
         token = await _register(client)
@@ -788,15 +787,18 @@ class TestAssessment:
         session_id = await _create_session(client, token, article_id)
         await _start_assessment(client, token, session_id)
 
-        # Opener: partial → 3 follow-ups queued
+        # Opener: partial
         await _answer(client, token, session_id, "Some knowledge.", mock_class="partial")
-        # Follow-up 1 targets Nucleotides (root) — mark mastered
-        await _answer(client, token, session_id, "Nucleotides are the building blocks.", mock_class="mastered")
+        # Follow-up: describe Double Helix → holistic classifier marks it mastered
+        await _answer(client, token, session_id, "DNA has a double helix structure.", mock_class="partial")
 
-        await client.post(
-            f"/api/sessions/{session_id}/assessment/complete",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        # complete_assessment runs holistic classification: double-helix mastered → nucleotides raised
+        with patch("webapp.api.assessment.classify_full_assessment",
+                   return_value={"double-helix": "mastered", "nucleotides": "partial"}):
+            await client.post(
+                f"/api/sessions/{session_id}/assessment/complete",
+                headers={"Authorization": f"Bearer {token}"},
+            )
 
         async with TestSessionLocal() as db:
             from sqlalchemy import select
@@ -820,13 +822,16 @@ class TestAssessment:
 
         # Opener: absent
         await _answer(client, token, session_id, "I don't know.", mock_class="absent")
-        # Follow-up targets Nucleotides — mark absent
+        # Follow-up: no knowledge of nucleotides
         await _answer(client, token, session_id, "No idea.", mock_class="absent")
 
-        await client.post(
-            f"/api/sessions/{session_id}/assessment/complete",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        # complete_assessment runs holistic classification: nucleotides absent → double-helix lowered
+        with patch("webapp.api.assessment.classify_full_assessment",
+                   return_value={"nucleotides": "absent", "double-helix": "absent"}):
+            await client.post(
+                f"/api/sessions/{session_id}/assessment/complete",
+                headers={"Authorization": f"Bearer {token}"},
+            )
 
         async with TestSessionLocal() as db:
             from sqlalchemy import select
@@ -881,32 +886,9 @@ class TestAssessment:
 # ---------------------------------------------------------------------------
 
 class TestAssessmentService:
-    def test_select_followup_kcs_returns_roots(self):
-        from webapp.services.assessment_service import select_followup_kcs
-        dm = {
-            "core_concepts": [
-                {"concept": "A", "description": "", "prerequisite_for": ["B"], "depth_priority": "essential"},
-                {"concept": "B", "description": "", "prerequisite_for": [], "depth_priority": "essential"},
-            ],
-            "recommended_sequence": ["A", "B"],
-            "checkpoint_questions": [],
-        }
-        result = select_followup_kcs(dm)
-        # A has no upstream (nothing lists A as a dependent), B is downstream of A
-        assert result[0]["kc_id"] == "a"
-
-    def test_select_followup_kcs_caps_at_max(self):
-        from webapp.services.assessment_service import select_followup_kcs
-        dm = {
-            "core_concepts": [
-                {"concept": f"C{i}", "description": "", "prerequisite_for": [], "depth_priority": "essential"}
-                for i in range(6)
-            ],
-            "recommended_sequence": [f"C{i}" for i in range(6)],
-            "checkpoint_questions": [],
-        }
-        result = select_followup_kcs(dm, max_followups=3)
-        assert len(result) == 3
+    def test_max_followups_is_five(self):
+        from webapp.services.assessment_service import MAX_FOLLOWUPS
+        assert MAX_FOLLOWUPS == 5
 
     def test_propagate_l0_global_prior_fills_unassessed(self):
         from webapp.services.assessment_service import propagate_l0

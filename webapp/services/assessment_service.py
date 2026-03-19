@@ -2,8 +2,9 @@
 webapp/services/assessment_service.py
 
 Pure functions for the pre-session assessment flow:
-  - Follow-up KC selection (graph root detection)
-  - Student response classification via Haiku
+  - Follow-up question generation via LLM (contextual, conversational)
+  - Opener classification (global prior for L0 propagation)
+  - Holistic end-of-assessment classification across all KCs
   - L0 propagation through the prerequisite graph
 """
 
@@ -20,10 +21,10 @@ from webapp.services.domain_cache import build_kg_from_domain_map, _slugify
 # Constants
 # ---------------------------------------------------------------------------
 
-OPENER_KC_ID = "__opener__"
-OPENER_TEXT = "Before we begin, briefly describe what you already know about {topic}."
-MAX_FOLLOWUPS = 3
-MAX_QUESTIONS = 4  # opener + 3 follow-ups
+OPENER_KC_ID  = "__opener__"
+OPENER_TEXT   = "Before we begin, briefly describe what you already know about {topic}."
+MAX_FOLLOWUPS = 5
+MAX_QUESTIONS = 6  # opener + 5 follow-ups
 
 L0_VALUES: dict[str, float] = {
     "mastered": 0.90,
@@ -32,31 +33,8 @@ L0_VALUES: dict[str, float] = {
 }
 
 # ---------------------------------------------------------------------------
-# Classification prompts
+# Prompts
 # ---------------------------------------------------------------------------
-
-_CLASSIFY_PROMPT = """\
-You are an educational assessment assistant. A student was asked about a specific \
-knowledge concept and gave the free-text response below. Classify their level of \
-understanding of that concept.
-
-CONCEPT: {kc_name}
-CONCEPT DESCRIPTION: {kc_description}
-
-STUDENT RESPONSE:
-{student_response}
-
-Choose exactly one classification:
-- mastered : Student explains the concept correctly and clearly in their own words,
-             demonstrating genuine understanding without prompting.
-- partial  : Student shows some awareness — mentions relevant terms or a partial idea —
-             but the explanation is incomplete, vague, or missing key details.
-- absent   : Student shows no meaningful understanding: says "I don't know", gives a
-             completely off-topic response, or does not engage with the concept at all.
-
-Respond with a JSON object and nothing else:
-{{"classification": "<mastered|partial|absent>", "confidence": <0.0-1.0>, \
-"evidence": "<one sentence quoting or paraphrasing the key signal from their response>"}}"""
 
 _OPENER_CLASSIFY_PROMPT = """\
 A student was asked to describe what they already know about "{topic}". \
@@ -74,59 +52,77 @@ Respond with JSON only:
 {{"classification": "<mastered|partial|absent>", \
 "evidence": "<brief quote or paraphrase showing the key signal>"}}"""
 
+_FOLLOWUP_PROMPT = """\
+You are assessing a student's prior knowledge before a tutoring session on "{topic}".
+
+Conversation so far:
+{conversation}
+
+The lesson covers these knowledge components:
+{kc_summary}
+
+Ask one natural follow-up question to better understand the student's prior knowledge. \
+The question should:
+- Explore an aspect not yet covered in the conversation
+- Sound conversational, not like a formal test item
+- Not include hints, corrections, or explanations — only probe
+
+Reply with just the question text, nothing else."""
+
+_HOLISTIC_CLASSIFY_PROMPT = """\
+You conducted a brief prior-knowledge assessment before a tutoring session on "{topic}".
+
+Full assessment conversation:
+{conversation}
+
+The lesson covers these knowledge components:
+{kc_list}
+
+For each knowledge component, classify the student's demonstrated prior knowledge:
+- "mastered" : student clearly and correctly described this concept in their own words
+- "partial"  : student showed some relevant awareness but incomplete or vague
+- "absent"   : no meaningful knowledge of this concept was demonstrated
+
+Default to "absent" for any concept the student did not address.
+
+Return a JSON object mapping each kc_id slug to its classification, for every KC listed:
+{{"<kc_id_slug>": "mastered|partial|absent", ...}}"""
+
 # ---------------------------------------------------------------------------
-# Follow-up KC selection
+# Question generation
 # ---------------------------------------------------------------------------
 
-def select_followup_kcs(domain_map: dict, max_followups: int = MAX_FOLLOWUPS) -> list[dict]:
-    """
-    Return up to max_followups KC dicts targeting foundational KCs.
-
-    Foundational KCs = those in recommended_sequence that are NOT depended on
-    by any other concept (i.e., graph roots — nothing is a prerequisite FOR them).
-    Falls back to first N in recommended_sequence if no roots found.
-
-    Returns list of dicts: {"kc_id": str, "kc_name": str, "question_text": str}
-    """
+async def generate_followup_question(
+    conversation: list[dict],
+    topic: str,
+    domain_map: dict,
+    client: anthropic.AsyncAnthropic,
+    model: str = "claude-haiku-4-5-20251001",
+) -> str:
+    """Generate a natural contextual follow-up question from the conversation so far."""
     concepts = domain_map.get("core_concepts", [])
-    sequence = domain_map.get("recommended_sequence", [])
-    checkpoint_questions = domain_map.get("checkpoint_questions", [])
-
-    # Build a lookup: concept_name → checkpoint question text
-    checkpoint_by_concept: dict[str, str] = {}
-    for cq in checkpoint_questions:
-        after = cq.get("after_concept", "")
-        question = cq.get("question", "")
-        if after and question:
-            checkpoint_by_concept[after] = question
-
-    # Build the set of concept names that are downstream of something
-    # (i.e., they appear as a target in some concept's prerequisite_for list)
-    has_upstream: set[str] = set()
-    for c in concepts:
-        for downstream in c.get("prerequisite_for", []):
-            has_upstream.add(downstream)
-
-    # Graph roots = in sequence but NOT downstream of anything
-    foundational: list[str] = [
-        name for name in sequence if name not in has_upstream
-    ]
-
-    # Fall back to first N if no roots found (e.g. linear chain with no true root)
-    candidates = foundational if foundational else sequence
-
-    selected = candidates[:max_followups]
-
-    result = []
-    for name in selected:
-        kc_id = _slugify(name)
-        question_text = checkpoint_by_concept.get(
-            name,
-            f"Can you explain what {name} means in your own words?"
+    kc_summary = "\n".join(
+        f"- {c['concept']}: {c.get('description', '')[:120]}"
+        for c in concepts[:15]
+    )
+    conv_text = "\n".join(
+        f"{'Tutor' if t['role'] == 'tutor' else 'Student'}: {t['text']}"
+        for t in conversation
+    )
+    prompt = _FOLLOWUP_PROMPT.format(
+        topic=topic,
+        conversation=conv_text,
+        kc_summary=kc_summary,
+    )
+    try:
+        response = await client.messages.create(
+            model=model,
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}],
         )
-        result.append({"kc_id": kc_id, "kc_name": name, "question_text": question_text})
-
-    return result
+        return response.content[0].text.strip()
+    except Exception:
+        return "Can you share anything else about your background with this topic?"
 
 
 # ---------------------------------------------------------------------------
@@ -147,20 +143,46 @@ async def classify_opener_answer(
     return await _run_classify(prompt, client, model)
 
 
-async def classify_assessment_answer(
-    student_response: str,
-    kc_name: str,
-    kc_description: str,
+async def classify_full_assessment(
+    conversation: list[dict],
+    topic: str,
+    domain_map: dict,
     client: anthropic.AsyncAnthropic,
     model: str = "claude-haiku-4-5-20251001",
-) -> str:
-    """Classify a KC-specific answer into mastered/partial/absent. Returns 'absent' on failure."""
-    prompt = _CLASSIFY_PROMPT.format(
-        kc_name=kc_name,
-        kc_description=kc_description[:500],
-        student_response=student_response[:1500],
+) -> dict[str, str]:
+    """
+    Holistic end-of-assessment classification.
+    Returns {kc_slug: 'mastered'|'partial'|'absent'} for all KCs in the domain map.
+    """
+    concepts = domain_map.get("core_concepts", [])
+    kc_list = "\n".join(
+        f"- {_slugify(c['concept'])} ({c['concept']}): {c.get('description', '')[:150]}"
+        for c in concepts
     )
-    return await _run_classify(prompt, client, model)
+    conv_text = "\n".join(
+        f"{'Tutor' if t['role'] == 'tutor' else 'Student'}: {t['text']}"
+        for t in conversation
+    )
+    prompt = _HOLISTIC_CLASSIFY_PROMPT.format(
+        topic=topic,
+        conversation=conv_text,
+        kc_list=kc_list,
+    )
+    try:
+        response = await client.messages.create(
+            model=model,
+            max_tokens=800,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.content[0].text.strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        data = json.loads(raw)
+        valid = {"mastered", "partial", "absent"}
+        known_ids = {_slugify(c["concept"]) for c in concepts}
+        return {k: v for k, v in data.items() if k in known_ids and v in valid}
+    except Exception:
+        return {}
 
 
 async def _run_classify(

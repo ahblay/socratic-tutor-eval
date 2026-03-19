@@ -23,12 +23,11 @@ from webapp.services.assessment_service import (
     OPENER_KC_ID,
     OPENER_TEXT,
     MAX_FOLLOWUPS,
-    classify_assessment_answer,
     classify_opener_answer,
+    classify_full_assessment,
+    generate_followup_question,
     class_from_l0,
-    kc_description_for,
     propagate_l0,
-    select_followup_kcs,
 )
 
 router = APIRouter()
@@ -54,7 +53,7 @@ class AnswerAssessmentResponse(BaseModel):
     question_text: str | None
     kc_id: str | None
     assessment_complete: bool
-    observation_class: str
+    observation_class: str | None = None
 
 
 class CompleteAssessmentResponse(BaseModel):
@@ -106,10 +105,6 @@ async def start_assessment(
             kc_id=OPENER_KC_ID,
             assessment_complete=False,
         )
-
-    # Pre-compute follow-up queue and store in session state
-    followup_queue = select_followup_kcs(article.domain_map or {}, MAX_FOLLOWUPS)
-    session.tutor_state_snapshot = {"assessment_queue": followup_queue}
 
     # Create opener Assessment row
     opener_row = Assessment(
@@ -170,22 +165,12 @@ async def answer_question(
 
     client = anthropic.AsyncAnthropic()  # reads ANTHROPIC_API_KEY from env
 
-    # Classify the student's answer
+    # Classify the opener eagerly — used as global_prior in complete_assessment
+    observation_class: str | None = None
     if current_row.question_index == 0:
-        # Opener: classify overall prior knowledge
         observation_class = await classify_opener_answer(
             student_response=body.answer,
             topic=article.canonical_title,
-            client=client,
-        )
-    else:
-        # Follow-up: classify KC-specific knowledge
-        kc_name = _kc_name_for_id(current_row.kc_id, article.domain_map or {})
-        kc_description = kc_description_for(kc_name, article.domain_map or {})
-        observation_class = await classify_assessment_answer(
-            student_response=body.answer,
-            kc_name=kc_name,
-            kc_description=kc_description,
             client=client,
         )
 
@@ -194,32 +179,39 @@ async def answer_question(
     current_row.observation_class = observation_class
     current_row.completed_at = datetime.now(timezone.utc)
 
-    # After opener: trim queue to 1 if student is mastered (short-circuit)
-    assessment_queue: list[dict] = (session.tutor_state_snapshot or {}).get("assessment_queue", [])
-    if current_row.question_index == 0 and observation_class == "mastered":
-        assessment_queue = assessment_queue[:1]
-        session.tutor_state_snapshot = {
-            **(session.tutor_state_snapshot or {}),
-            "assessment_queue": assessment_queue,
-        }
-
-    # Count completed follow-ups (index >= 1, already answered)
+    # Count answered follow-ups (including the one just saved)
     completed_followups = sum(
         1 for r in rows if r.question_index >= 1 and r.user_answer is not None
     )
-    # Include the one we just answered if it's a follow-up
     if current_row.question_index >= 1:
         completed_followups += 1
 
-    # Decide whether to issue a follow-up or signal completion
-    next_queue_index = completed_followups  # 0-based into assessment_queue
-    if next_queue_index < len(assessment_queue):
-        next_kc = assessment_queue[next_queue_index]
+    if completed_followups < MAX_FOLLOWUPS:
+        # Build conversation so far for context
+        answered = sorted(
+            [r for r in rows if r.user_answer is not None] + [current_row],
+            key=lambda r: r.question_index,
+        )
+        # Deduplicate (current_row may already be in rows if re-queried)
+        seen = set()
+        conversation: list[dict] = []
+        for r in answered:
+            if r.question_index not in seen:
+                seen.add(r.question_index)
+                conversation.append({"role": "tutor",   "text": r.question_text})
+                conversation.append({"role": "student", "text": r.user_answer})
+
+        next_question = await generate_followup_question(
+            conversation=conversation,
+            topic=article.canonical_title,
+            domain_map=article.domain_map or {},
+            client=client,
+        )
         next_row = Assessment(
             session_id=session_id,
             question_index=current_row.question_index + 1,
-            kc_id=next_kc["kc_id"],
-            question_text=next_kc["question_text"],
+            kc_id=f"__followup_{completed_followups}__",
+            question_text=next_question,
         )
         db.add(next_row)
         await db.commit()
@@ -232,7 +224,6 @@ async def answer_question(
             observation_class=observation_class,
         )
     else:
-        # No more follow-ups — signal completion
         await db.commit()
         return AnswerAssessmentResponse(
             question_index=current_row.question_index,
@@ -278,16 +269,27 @@ async def complete_assessment(
         raise HTTPException(status_code=409, detail="Assessment not started or opener not answered")
 
     global_prior = opener.observation_class or "absent"
+    domain_map = article.domain_map or {}
 
-    # Collect follow-up classifications
-    assessed_kcs: dict[str, str] = {
-        r.kc_id: r.observation_class
-        for r in rows
-        if r.question_index >= 1 and r.observation_class is not None
-    }
+    # Build full conversation for holistic classification
+    answered = sorted(
+        [r for r in rows if r.user_answer is not None],
+        key=lambda r: r.question_index,
+    )
+    conversation: list[dict] = []
+    for r in answered:
+        conversation.append({"role": "tutor",   "text": r.question_text})
+        conversation.append({"role": "student", "text": r.user_answer})
+
+    client = anthropic.AsyncAnthropic()
+    assessed_kcs = await classify_full_assessment(
+        conversation=conversation,
+        topic=article.canonical_title,
+        domain_map=domain_map,
+        client=client,
+    )
 
     # Propagate L0 across the full KC graph
-    domain_map = article.domain_map or {}
     l0_map = propagate_l0(domain_map, assessed_kcs, global_prior)
 
     # Upsert BKTStateRow for every KC
@@ -326,15 +328,3 @@ async def complete_assessment(
     )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _kc_name_for_id(kc_id: str, domain_map: dict) -> str:
-    """Reverse-lookup: kc_id slug → concept name from domain map."""
-    from webapp.services.domain_cache import _slugify
-    for c in domain_map.get("core_concepts", []):
-        name = c.get("concept", "")
-        if _slugify(name) == kc_id:
-            return name
-    return kc_id  # fallback: return the slug itself
