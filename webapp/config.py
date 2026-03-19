@@ -32,6 +32,9 @@ DATABASE_URL: str = os.environ.get(
     "DATABASE_URL",
     f"sqlite+aiosqlite:///{ROOT_DIR / 'webapp.db'}",
 )
+# Render (and most PaaS) inject postgresql:// but asyncpg requires postgresql+asyncpg://
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 # ---------------------------------------------------------------------------
 # Auth
