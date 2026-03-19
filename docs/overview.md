@@ -71,20 +71,19 @@ uvicorn webapp.app:create_app --factory --reload
 
 ## API Key & Cost Model
 
-**Current model: Bring Your Own Key (BYOK)**
+**Current model: Server-hosted key + credits**
 
-Users provide their own Anthropic API key when starting a session. The key is:
-- Sent as a request header on each API call
-- Used server-side for that request only — never persisted to the DB
-- Stored in the browser's `localStorage` between page loads
+The server uses its own `ANTHROPIC_API_KEY` (set in the server environment). Users do not provide API keys.
 
-Users also set a **turn budget** (max turns per session) when entering their key. The server enforces this limit before each API call, returning HTTP 402 when the budget is exhausted.
+Access is controlled via a **credit system**:
+- Each tutoring turn costs 1 credit
+- Superusers are exempt from credit checks
+- Credits are granted by a superuser via `POST /api/admin/users/{user_id}/credits`
+- The server returns HTTP 402 when credits are exhausted
 
 Token usage (input/output tokens) is accumulated per session from API response metadata and stored in the `sessions` table for cost analysis.
 
-**Known limitation**: The API key is transmitted over HTTPS to the server and stored in `localStorage`. This is an accepted risk for a BYOK pattern (standard in open-source LLM tooling). The server must never log request headers containing the key.
-
-**Future model**: When cost per session is well understood and the product is validated, switch to an operator-hosted key with a subscription or per-session credits model.
+**Future model**: When cost per session is well understood and the product is validated, a subscription or per-session purchase model will replace manual credit grants.
 
 ## Data Collection & Privacy
 

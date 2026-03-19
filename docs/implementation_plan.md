@@ -78,29 +78,28 @@ Single-page web UI (plain HTML/CSS/JS, no build step, no framework).
 **State machine phases:** `auth` → `article` → `chat (assessment)` → `chat (tutoring)` → `ended`
 
 **Auth flow:**
-- First visit: option to continue anonymously or sign in / register
+- First visit: sign in or register (anonymous removed)
 - Consent checkbox (not pre-checked) required at registration: "Conversation transcripts are collected to evaluate tutor performance."
-- JWT token + BYOK API key stored in `localStorage`
+- JWT token stored in `localStorage`
 
-**BYOK + turn budget UI:**
-- API key input field on article selection screen
-- Turn limit input (default: 50) alongside API key
-- Remaining turns shown during session
-- HTTP 402 response → friendly "Budget reached" message
+**Lesson catalog UI:**
+- Card list replaces the previous Wikipedia URL form
+- Clicking a card immediately starts or resumes the session (no two-step confirm)
+- "← Lessons" back button returns to catalog without ending session on backend
+
+**Credit system:**
+- Server uses its own `ANTHROPIC_API_KEY` — no BYOK
+- Users start with 0 credits; superusers exempt
+- Credits decremented per tutoring turn; HTTP 402 when exhausted
+- Admin endpoint: `POST /api/admin/users/{user_id}/credits`
 
 **Backend additions implemented:**
 - `GET /` route in `app.py` serves `index.html` via Jinja2Templates
-- `Session.max_turns`, `Session.total_input_tokens`, `Session.total_output_tokens` columns added
+- `Session.total_input_tokens`, `Session.total_output_tokens` columns added
 - `User.consented_at` column added
-- HTTP 402 response when turn budget exhausted
-- Turn budget enforcement + token accumulation in `post_turn`
-
-**BYOK wiring (Phase 5.1) ✅:**
-- `post_turn` extracts `X-API-Key` header and passes it to `SocraticTutor(api_key=...)`.
-- `answer_question` constructs a per-request `AsyncAnthropic(api_key=...)` client for assessment classification.
-- `SocraticTutor.__init__` accepts `api_key: str | None`; falls back to server env var if `None`.
-- Domain map generation deliberately uses the server's key (shared cached resource).
-- Server must have `ANTHROPIC_API_KEY` set for domain map generation (documented in `config.py`).
+- `User.credits_remaining` column added
+- HTTP 402 response when credits exhausted
+- Credit enforcement + token accumulation in `post_turn`
 
 ### Phase 6 — Knowledge Graph Panel ✅
 Live KC knowledge graph in the chat phase showing the tutor's model of student understanding.
@@ -111,7 +110,7 @@ Live KC knowledge graph in the chat phase showing the tutor's model of student u
 - `TurnResponse` enriched with `tutor_state` field so the observations panel updates each turn
 - Split chat layout: 46% graph panel (left) + 54% chat panel (right); graph panel hidden on mobile
 
-**Rendering**: viz.js (Graphviz WASM) renders DOT-language source; svg-pan-zoom adds pan/zoom. Nodes coloured by p_mastered (blue → amber → green); frontier nodes get a thicker amber border.
+**Rendering**: viz.js (Graphviz WASM) renders DOT-language source; svg-pan-zoom adds pan/zoom. Node fill colour from BKT assessment (blue → amber → green gradient). Node border colour driven by tutor's `current_concept_index`: white = active, green = covered, blue = not yet reached.
 
 **Domain map prerequisite fix pass** (`_fix_prerequisite_references` in `domain_cache.py`): a Haiku LLM call canonicalises `prerequisite_for` references so they exactly match `core_concepts` concept names. Runs once at domain-map creation time; result is cached permanently. Prevents disconnected graph nodes caused by LLM name inconsistency.
 
@@ -170,8 +169,8 @@ pytest
 | KFT: per-response or aggregate? | Per-turn, computed by evaluator during post-hoc analysis |
 | Tangent handling | Natural handling during session; evaluator partitions on-topic/tangent; THQ metric |
 | Pre-assessment format | Hybrid: fixed opener + ≤3 targeted follow-ups on foundational KCs; max 4 questions |
-| API key model | BYOK — user provides own Anthropic key; sent per-request, never persisted |
-| Cost / rate limiting | Turn-based budget set at session creation; server enforces; token counts accumulated silently |
+| API key model | Server-hosted `ANTHROPIC_API_KEY`; no BYOK |
+| Cost / rate limiting | Credit system: 1 credit per turn; superusers exempt; token counts accumulated silently |
 | User accounts | Full registration (email + password) + anonymous; learning history linked to accounts is future work |
 | Data collection consent | Checkbox at registration (not pre-checked); plain-language disclosure; satisfies PIPEDA + basic GDPR |
 | Prompt injection security | No real harm possible (text-only API, no tools); guardrail handles Socratic compliance; monitor failure modes |

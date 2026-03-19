@@ -118,40 +118,41 @@ Steps through transcript turn-by-turn:
 
 ## Component: Knowledge Graph UI (`webapp/static/graph.js`)
 
-The chat phase includes a live knowledge graph panel that visualises the tutor's model of the student's understanding. The graph is populated from assessment results and does **not** update turn-by-turn during tutoring.
+The chat phase includes a live knowledge graph panel that reflects the **tutor's internal model** of the session — not BKT estimates. It updates after every turn.
 
 **Rendering stack:**
 - **viz.js** (`@viz-js/viz@3.25.0`, CDN) — Graphviz compiled to WASM. Renders the KC dependency graph from a DOT-language string.
 - **svg-pan-zoom** (`svg-pan-zoom@3.6.1`, CDN) — adds pan and pinch-to-zoom to the rendered SVG.
 - `_viz` and `_panZoom` are module-level singletons; `_panZoom.destroy()` is called before each re-render to prevent memory leaks.
 
-**Node colouring**: `knowledgeColor(p)` maps p_mastered (0–1) to a hex colour along a blue → amber → green gradient. Frontier nodes (all prerequisites mastered, this concept not yet mastered) get a thicker amber border.
+**Node border colours** (driven by tutor's `current_concept_index` in `recommended_sequence`):
+- **White** — concept the tutor is currently working on
+- **Green** — concepts the tutor has already covered (index < current)
+- **Blue** — concepts not yet reached
+
+Node fill colour still uses `knowledgeColor(p)` from BKT assessment data (set once at session start, not updated during tutoring).
 
 **Data source** (`GET /api/sessions/{id}/graph-state`):
 ```json
 {
   "domain_map":    { "core_concepts": [...], ... },
   "bkt_snapshot":  { "<kc-slug>": 0.42, ... },
-  "tutor_state":   { "student_understanding": [...], "frustration_level": "..." }
+  "tutor_state":   { "current_concept_index": 2, "student_understanding": [...], "frustration_level": "..." }
 }
 ```
-- `domain_map`: article's KC graph — used to build the DOT source and the mastery bar list.
-- `bkt_snapshot`: per-KC p_mastered values from the assessment — used to colour nodes and fill bars.
-- `tutor_state`: tutor's latest observations — shown as chips in the "Tutor observations" panel.
+- `domain_map`: article's KC graph — used to build the DOT source.
+- `bkt_snapshot`: per-KC p_mastered values from pre-session assessment — used for node fill colour only.
+- `tutor_state`: tutor's latest state — drives active/covered node borders and observation chips.
 
-`app.js` calls `_loadGraphState()` twice: once when entering the chat phase and once at the start of tutoring (after assessment writes the initial BKT snapshot).
+`app.js` calls `_loadGraphState()` on session entry and at the start of tutoring. Each turn response also returns a `tutor_state` field so the graph and observations panel update after every student message without a full graph refresh.
 
-Each turn response (`POST /sessions/{id}/turn`) also returns a `tutor_state` field so the observations panel updates after every student message without a full graph refresh.
+## Component: API Key & Credit Enforcement
 
-## Component: BYOK API Key Handling
+The server uses its own `ANTHROPIC_API_KEY` environment variable. Users do not provide API keys.
 
-Users provide their own Anthropic API key. It is passed as a custom request header (`X-API-Key`) on session creation and each turn request. The server reads it per-request and passes it to the `SocraticTutor` — it is never written to the DB.
-
-**Turn budget enforcement**: `Session.max_turns` is set at session creation. `POST /sessions/{id}/turn` checks `session.turn_count < session.max_turns` before invoking the tutor. Returns HTTP 402 if budget exhausted.
+**Credit enforcement**: Each tutoring turn costs 1 credit. `POST /sessions/{id}/turn` checks `user.credits_remaining > 0` before invoking the tutor and decrements it atomically with the turn rows. Returns HTTP 402 if exhausted. Superusers (`users.is_superuser = true`) are exempt.
 
 **Token tracking**: After each tutor API call, `session.total_input_tokens` and `session.total_output_tokens` are incremented from the response's `usage` field. Stored for cost analysis; not shown to users in MVP.
-
-**Security note**: The API key is transmitted over HTTPS and stored in browser `localStorage`. The server must never log request headers. This is the accepted BYOK risk profile.
 
 ## Webapp Session Lifecycle
 
