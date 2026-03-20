@@ -342,24 +342,38 @@ async def get_transcript(
     user: User = Depends(get_current_user),
 ):
     session = await _get_session_or_404(session_id, user.id, db)
-    result = await db.execute(
+
+    # Assessment turns (answered only), ordered by question index
+    assessment_result = await db.execute(
+        select(Assessment)
+        .where(Assessment.session_id == session_id)
+        .where(Assessment.user_answer.is_not(None))
+        .order_by(Assessment.question_index)
+    )
+    assessments = assessment_result.scalars().all()
+
+    # Tutoring turns
+    turns_result = await db.execute(
         select(Turn)
         .where(Turn.session_id == session_id)
         .order_by(Turn.turn_number)
     )
-    turns = result.scalars().all()
-    return {
-        "session_id": session_id,
-        "turns": [
-            {
-                "turn_number": t.turn_number,
-                "role": t.role,
-                "content": t.content,
-                "evaluator_snapshot": t.evaluator_snapshot,
-            }
-            for t in turns
-        ],
-    }
+    turns = turns_result.scalars().all()
+
+    # Build unified turn list: assessment Q&A first, then tutoring turns
+    all_turns = []
+    for a in assessments:
+        all_turns.append({"role": "tutor", "content": a.question_text})
+        all_turns.append({"role": "user",  "content": a.user_answer})
+    for t in turns:
+        all_turns.append({
+            "turn_number": t.turn_number,
+            "role": t.role,
+            "content": t.content,
+            "evaluator_snapshot": t.evaluator_snapshot,
+        })
+
+    return {"session_id": session_id, "turns": all_turns}
 
 
 # ---------------------------------------------------------------------------
