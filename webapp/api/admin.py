@@ -13,6 +13,7 @@ POST /api/admin/users/{user_id}/credits       — add credits to a user
 POST /api/admin/articles/{article_id}/publish — make article visible in catalog
 POST /api/admin/articles/{article_id}/unpublish
 GET  /api/admin/users                         — list all users with credit balances
+GET  /api/admin/users/{user_id}/sessions      — list all sessions for a user
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from webapp.api.auth import get_current_user
 from webapp.db import get_db
-from webapp.db.models import Article, User
+from webapp.db.models import Article, Session, User
 
 router = APIRouter()
 
@@ -93,6 +94,39 @@ async def add_credits(
     target.credits_remaining += body.amount
     await db.commit()
     return {"user_id": user_id, "credits_remaining": target.credits_remaining}
+
+
+@router.get("/users/{user_id}/sessions")
+async def list_user_sessions(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all sessions for a user with article title, status, and turn count."""
+    _require_superuser(current_user)
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    sessions_result = await db.execute(
+        select(Session, Article)
+        .join(Article, Session.article_id == Article.id)
+        .where(Session.user_id == user_id)
+        .order_by(Session.created_at)
+    )
+    rows = sessions_result.all()
+    return [
+        {
+            "session_id": s.id,
+            "article_id": s.article_id,
+            "article_title": a.canonical_title,
+            "status": s.status,
+            "turn_count": s.turn_count,
+            "created_at": s.created_at.isoformat(),
+        }
+        for s, a in rows
+    ]
 
 
 # ---------------------------------------------------------------------------
