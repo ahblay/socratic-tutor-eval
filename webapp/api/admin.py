@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from webapp.api.auth import get_current_user
 from webapp.db import get_db
-from webapp.db.models import Article, Session, User
+from webapp.db.models import Article, Assessment, Session, Turn, User
 
 router = APIRouter()
 
@@ -127,6 +127,44 @@ async def list_user_sessions(
         }
         for s, a in rows
     ]
+
+
+@router.get("/sessions/{session_id}/transcript")
+async def get_session_transcript(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return the full transcript for any session (superuser only)."""
+    _require_superuser(current_user)
+
+    result = await db.execute(select(Session).where(Session.id == session_id))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    assessment_result = await db.execute(
+        select(Assessment)
+        .where(Assessment.session_id == session_id)
+        .where(Assessment.user_answer.is_not(None))
+        .order_by(Assessment.question_index)
+    )
+    assessments = assessment_result.scalars().all()
+
+    turns_result = await db.execute(
+        select(Turn)
+        .where(Turn.session_id == session_id)
+        .order_by(Turn.turn_number)
+    )
+    turns = turns_result.scalars().all()
+
+    all_turns = []
+    for a in assessments:
+        all_turns.append({"role": "tutor", "content": a.question_text})
+        all_turns.append({"role": "user",  "content": a.user_answer})
+    for t in turns:
+        all_turns.append({"role": t.role, "content": t.content})
+
+    return {"session_id": session_id, "turns": all_turns}
 
 
 # ---------------------------------------------------------------------------
