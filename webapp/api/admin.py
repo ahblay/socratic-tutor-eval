@@ -113,7 +113,7 @@ async def list_user_sessions(
         select(Session, Article)
         .join(Article, Session.article_id == Article.id)
         .where(Session.user_id == user_id)
-        .order_by(Session.created_at)
+        .order_by(Session.started_at)
     )
     rows = sessions_result.all()
     return [
@@ -123,7 +123,7 @@ async def list_user_sessions(
             "article_title": a.canonical_title,
             "status": s.status,
             "turn_count": s.turn_count,
-            "created_at": s.created_at.isoformat(),
+            "started_at": s.started_at.isoformat(),
         }
         for s, a in rows
     ]
