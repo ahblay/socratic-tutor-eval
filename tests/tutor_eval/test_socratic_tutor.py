@@ -5,8 +5,10 @@ Unit tests for SocraticTutor — state management and serialization.
 No API calls made (respond() is not called).
 """
 
+import json
+
 import pytest
-from tutor_eval.tutors.socratic import SocraticTutor
+from tutor_eval.tutors.socratic import SocraticTutor, enrich_domain_map
 from webapp.services.domain_cache import build_kg_from_domain_map, get_target_kcs
 
 
@@ -271,3 +273,108 @@ class TestResponseGuardrail:
 
         result = tutor.respond("What is the answer?", [{"role": "student", "text": "What is the answer?"}])
         assert result == "Here is the answer: 42."  # falls back gracefully
+
+
+# ---------------------------------------------------------------------------
+# enrich_domain_map
+# ---------------------------------------------------------------------------
+
+_ENRICHED_DOMAIN_MAP = {
+    "topic": "DNA",
+    "core_concepts": [
+        {
+            "concept": "DNA Structure",
+            "description": "...",
+            "prerequisite_for": ["DNA Replication"],
+            "depth_priority": "essential",
+            "knowledge_type": "concept",
+            "reference_material": "Imagine a twisted ladder — what do you think each part of the ladder might represent?",
+        },
+        {
+            "concept": "DNA Replication",
+            "description": "...",
+            "prerequisite_for": [],
+            "depth_priority": "essential",
+            "knowledge_type": "concept",
+            "reference_material": "A cell needs to divide. What has to happen to the genetic information before that can occur?",
+        },
+    ],
+    "recommended_sequence": ["DNA Structure", "DNA Replication"],
+    "common_misconceptions": [],
+    "checkpoint_questions": [],
+    "required_skills": [],
+    "prerequisite_knowledge": [],
+    "engagement_risk_points": [],
+}
+
+
+class TestEnrichDomainMap:
+    def _mock_client(self, response_text: str) -> MagicMock:
+        client = MagicMock()
+        resp = MagicMock()
+        block = MagicMock()
+        block.text = response_text
+        resp.content = [block]
+        client.messages.create.return_value = resp
+        return client
+
+    def test_adds_knowledge_type_and_reference_material(self):
+        client = self._mock_client(json.dumps(_ENRICHED_DOMAIN_MAP))
+        result = enrich_domain_map(SAMPLE_DOMAIN_MAP, client)
+        for concept in result["core_concepts"]:
+            assert "knowledge_type" in concept
+            assert concept["knowledge_type"] in ("convention", "concept", "narrative")
+            assert "reference_material" in concept
+            assert isinstance(concept["reference_material"], str)
+
+    def test_may_expand_concept_count(self):
+        """Enricher is allowed to split concepts — result may have more nodes."""
+        expanded = dict(_ENRICHED_DOMAIN_MAP)
+        expanded["core_concepts"] = _ENRICHED_DOMAIN_MAP["core_concepts"] + [
+            {
+                "concept": "DNA Repair",
+                "description": "...",
+                "prerequisite_for": [],
+                "depth_priority": "important",
+                "knowledge_type": "concept",
+                "reference_material": "What happens if a copying error is made?",
+            }
+        ]
+        expanded["recommended_sequence"] = ["DNA Structure", "DNA Replication", "DNA Repair"]
+        client = self._mock_client(json.dumps(expanded))
+        result = enrich_domain_map(SAMPLE_DOMAIN_MAP, client)
+        assert len(result["core_concepts"]) == 3
+
+    def test_falls_back_on_api_error(self):
+        client = MagicMock()
+        client.messages.create.side_effect = Exception("network error")
+        result = enrich_domain_map(SAMPLE_DOMAIN_MAP, client)
+        assert result == SAMPLE_DOMAIN_MAP
+
+    def test_falls_back_on_invalid_json(self):
+        client = self._mock_client("not valid json at all")
+        result = enrich_domain_map(SAMPLE_DOMAIN_MAP, client)
+        assert result == SAMPLE_DOMAIN_MAP
+
+    def test_falls_back_on_empty_concepts(self):
+        bad = {"topic": "DNA", "core_concepts": [], "recommended_sequence": []}
+        client = self._mock_client(json.dumps(bad))
+        result = enrich_domain_map(SAMPLE_DOMAIN_MAP, client)
+        assert result == SAMPLE_DOMAIN_MAP
+
+    def test_falls_back_if_concept_missing_name(self):
+        bad = {
+            "topic": "DNA",
+            "core_concepts": [{"description": "no concept key", "prerequisite_for": []}],
+            "recommended_sequence": ["something"],
+        }
+        client = self._mock_client(json.dumps(bad))
+        result = enrich_domain_map(SAMPLE_DOMAIN_MAP, client)
+        assert result == SAMPLE_DOMAIN_MAP
+
+    def test_strips_markdown_fences(self):
+        fenced = "```json\n" + json.dumps(_ENRICHED_DOMAIN_MAP) + "\n```"
+        client = self._mock_client(fenced)
+        result = enrich_domain_map(SAMPLE_DOMAIN_MAP, client)
+        assert result["topic"] == "DNA"
+        assert "knowledge_type" in result["core_concepts"][0]

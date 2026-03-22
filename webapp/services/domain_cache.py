@@ -18,7 +18,7 @@ import anthropic
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tutor_eval.tutors.socratic import compute_domain_map
+from tutor_eval.tutors.socratic import compute_domain_map, enrich_domain_map
 from webapp.db.models import Article
 
 
@@ -45,8 +45,9 @@ async def get_or_create_domain_map(
     sync_client = anthropic.Anthropic(api_key=client.api_key)
 
     def _compute_and_fix(text: str) -> dict:
-        dm = compute_domain_map(text, sync_client)
-        return _fix_prerequisite_references(dm, sync_client)
+        dm = compute_domain_map(text, sync_client)          # Pass 1: concept list
+        dm = enrich_domain_map(dm, sync_client)             # Pass 2: decompose + type + reference
+        return _fix_prerequisite_references(dm, sync_client)  # Pass 3: canonicalise edges
 
     domain_map = await asyncio.to_thread(_compute_and_fix, article_text)
 

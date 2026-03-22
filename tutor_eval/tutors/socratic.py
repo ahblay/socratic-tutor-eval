@@ -59,6 +59,33 @@ calibrate your question. Do not refer to them explicitly in your response.
 
 ---
 
+## Opening a Concept
+
+When `current_concept_index` advances to a new concept, look up that concept in \
+the DOMAIN MAP's `core_concepts` and check its `knowledge_type`:
+
+**If `knowledge_type` is `convention`:** Do NOT try to elicit this through \
+questioning. The student cannot derive an arbitrary syntax rule or vocabulary term \
+through reasoning. Present the `reference_material` directly — say something like \
+"Before we go further, here is something you will need:" and then deliver the \
+material verbatim or near-verbatim. After presenting it, ask ONE question that \
+probes whether the student can APPLY the convention — not recall it. Then run a \
+comprehension checkpoint and advance. Convention nodes should take 2–3 turns total.
+
+**If `knowledge_type` is `narrative`:** Present the `reference_material` as \
+background context — "Here is some context you'll need:" — then ask a Socratic \
+question about its implications or significance. Narrative nodes should take \
+2–4 turns total.
+
+**If `knowledge_type` is `concept`:** Use existing questioning phases. The \
+`reference_material` is a scenario seed you may use to ground your first question; \
+do not read it aloud as a statement.
+
+**If `knowledge_type` is absent** (older domain maps): treat the concept as \
+`concept` type and use existing behavior.
+
+---
+
 ## Every Turn — The Response Loop
 
 For **every response you generate**, follow this loop:
@@ -410,7 +437,11 @@ be able to *do* and *reason through*.
 
 Analyze the topic below and produce a structured domain map. Think carefully about:
 
-1. **Core concepts** — The key ideas, ordered from foundational to advanced.
+1. **Core concepts** — The key ideas, ordered from foundational to advanced. Each \
+   concept should represent a single atomic teaching unit: one idea, one rule, or \
+   one convention. As a test: if you cannot assign a single teaching approach to \
+   the concept without hedging, split it into two separate concepts. Aim for \
+   12–20 concepts for a typical article-length topic.
 2. **Required skills** — The reasoning abilities the student needs (e.g., "apply X \
    to an unfamiliar case", "distinguish between X and Y"). Skills are more important \
    than facts.
@@ -473,6 +504,105 @@ Respond with ONLY a JSON object in this exact format:
 }}
 
 Do not include any text outside the JSON object."""
+
+# ---------------------------------------------------------------------------
+# Domain enricher prompt (Pass 2)
+# ---------------------------------------------------------------------------
+
+_DOMAIN_ENRICHER_PROMPT = """\
+You are enriching a domain map for a Socratic tutoring system. The system uses \
+this map to guide a professor-student dialogue. Your job is to ensure every \
+concept node has the right granularity, a knowledge type, and reference material.
+
+---
+
+## Step 1 — Check Granularity
+
+For each concept in `core_concepts`, ask: can this concept be assigned a single \
+`knowledge_type` (convention, concept, or narrative) without hedging?
+
+If NO — the concept bundles multiple types and must be split into two or more \
+atomic nodes. Each split node gets its own entry in `core_concepts` with its own \
+`prerequisite_for`, `depth_priority`, `knowledge_type`, and `reference_material`.
+
+When splitting:
+- Update `recommended_sequence`: replace the original concept name with the split \
+  nodes in the same position, in the order a student would encounter them.
+- Update all `prerequisite_for` references: anything that pointed to the original \
+  concept should now point to the last (most advanced) split node.
+
+---
+
+## Step 2 — Assign knowledge_type
+
+**convention**: An arbitrary rule, syntax requirement, vocabulary term, or format \
+specification. The student CANNOT derive it through reasoning — it must be shown. \
+Test: "Could a careful thinker figure this out without being told?" If NO — convention.
+
+Examples: attribute value quoting rules in XML, coordinate decimal format, \
+file extension conventions, the name of a notation system (e.g. "DMS"), \
+any named standard (e.g. "WGS84"), units used by a format (e.g. "meters for elevation").
+
+**concept**: An idea the student can reason toward from first principles or prior \
+knowledge through Socratic questioning.
+
+Examples: why a common denominator is needed, why coordinates require two values, \
+why XML uses nesting to express hierarchy, why a standard coordinate system \
+is needed for interoperability.
+
+**narrative**: A historical fact, origin story, named entity, or technical \
+background that must be presented before reasoning is possible — but is not \
+arbitrary syntax.
+
+Examples: GPX was developed by TopoGrafix in 2002, WGS84 is the coordinate \
+reference system used by GPS satellites, XML was standardized by the W3C.
+
+---
+
+## Step 3 — Write reference_material
+
+For every concept, write a `reference_material` string the tutor will use when \
+opening that concept with a student.
+
+**convention** — Write the exact rule, syntax, or definition the student needs, \
+ready to present verbatim. Always include a concrete example.
+Example: 'In XML, attribute values must always be enclosed in double quotes — \
+even numbers. For example: <waypoint lat="48.8566" lon="2.3522">'
+
+**concept** — Write a concrete scenario or partial example the student can reason \
+about without revealing the answer. Make it specific enough to be useful.
+Example: 'Imagine two GPS devices from different manufacturers store coordinates \
+differently — one uses decimal degrees, the other uses degrees-minutes-seconds. \
+What problem would you run into when trying to share route data between them?'
+
+**narrative** — Write the key facts plainly, as background the student needs \
+before any question can be meaningful.
+Example: 'GPS Exchange Format (GPX) is an open XML schema published by TopoGrafix \
+in 2002. It defines a standard way to store GPS tracks, routes, and waypoints so \
+that data can be exchanged between different devices and applications.'
+
+---
+
+## Output
+
+Return the COMPLETE enriched domain map as a JSON object. The schema is identical \
+to the input, except:
+- Each entry in `core_concepts` now has two additional fields:
+    "knowledge_type": "convention|concept|narrative",
+    "reference_material": "string the tutor can present"
+- `core_concepts` may have MORE entries than the input (from splits)
+- `recommended_sequence` must reflect any splits (new node names in correct positions)
+- All other top-level fields (`required_skills`, `prerequisite_knowledge`, \
+  `common_misconceptions`, `checkpoint_questions`, `engagement_risk_points`) \
+  are carried through unchanged
+
+Return ONLY the JSON object. No explanation, no markdown fences.
+
+---
+
+## DOMAIN MAP TO ENRICH
+
+{domain_map_json}"""
 
 
 # ---------------------------------------------------------------------------
@@ -853,6 +983,52 @@ def compute_domain_map(topic: str, client: anthropic.Anthropic) -> dict:
             "prerequisite_knowledge": [],
             "engagement_risk_points": [],
         }
+
+
+def enrich_domain_map(domain_map: dict, client: anthropic.Anthropic) -> dict:
+    """
+    Pass 2: decompose coarse nodes and add knowledge_type + reference_material
+    to every concept in core_concepts.
+
+    Falls back to the unenriched map on any failure so the pipeline is never
+    blocked by the enrichment step.
+    """
+    prompt = _DOMAIN_ENRICHER_PROMPT.format(
+        domain_map_json=json.dumps(domain_map, indent=2)
+    )
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=8192,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.content[0].text.strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        enriched = json.loads(raw)
+
+        # Sanity check: verify structural requirements for JS graph rendering.
+        # core_concepts must be a non-empty list with valid concept strings;
+        # recommended_sequence must be a non-empty list.
+        concepts = enriched.get("core_concepts", [])
+        sequence = enriched.get("recommended_sequence", [])
+        if (
+            not concepts
+            or not all(isinstance(c.get("concept"), str) and c["concept"] for c in concepts)
+            or not sequence
+        ):
+            print(
+                "  [domain-enricher] enriched map failed structural check — "
+                "returning unenriched map",
+                file=sys.stderr,
+            )
+            return domain_map
+
+        return enriched
+
+    except Exception as e:
+        print(f"  [domain-enricher] failed ({e}) — returning unenriched map", file=sys.stderr)
+        return domain_map
 
 
 def _derive_slug(topic: str) -> str:
