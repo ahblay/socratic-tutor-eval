@@ -167,6 +167,52 @@ async def get_session_transcript(
     return {"session_id": session_id, "turns": all_turns}
 
 
+@router.get("/sessions/{session_id}/guardrail-review")
+async def get_guardrail_review(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return the full transcript with pre- and post-guardrail responses for every
+    tutor turn. Useful for manually evaluating NAC (non-answer compliance).
+
+    Each tutor turn includes:
+      - content:        post-guardrail response shown to the student
+      - raw_content:    pre-guardrail response from the tutor (may equal content)
+      - guardrail_fired: true when the guardrail rewrote the response
+    """
+    _require_superuser(current_user)
+
+    result = await db.execute(select(Session).where(Session.id == session_id))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    turns_result = await db.execute(
+        select(Turn)
+        .where(Turn.session_id == session_id)
+        .order_by(Turn.turn_number)
+    )
+    turns = turns_result.scalars().all()
+
+    return {
+        "session_id": session_id,
+        "turns": [
+            {
+                "turn_number": t.turn_number,
+                "role": t.role,
+                "content": t.content,
+                "raw_content": t.raw_content if t.role == "tutor" else None,
+                "guardrail_fired": (
+                    t.raw_content is not None and t.raw_content != t.content
+                    if t.role == "tutor" else None
+                ),
+            }
+            for t in turns
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Article endpoints
 # ---------------------------------------------------------------------------
