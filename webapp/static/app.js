@@ -242,6 +242,10 @@ const App = (() => {
     Chat.clearMessages();
     Chat.setTopic(AppState.articleTitle || "");
 
+    // Clone form to clear any stale submit handlers from a previous session
+    const oldForm = document.getElementById("form-chat");
+    oldForm.replaceWith(oldForm.cloneNode(true));
+
     document.getElementById("btn-logout2").onclick     = Auth.logout;
     document.getElementById("btn-end-session").onclick  = _endSession;
     document.getElementById("btn-back-catalog").onclick = _backToCatalog;
