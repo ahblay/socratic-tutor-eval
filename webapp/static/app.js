@@ -246,20 +246,16 @@ const App = (() => {
     document.getElementById("btn-end-session").onclick  = _endSession;
     document.getElementById("btn-back-catalog").onclick = _backToCatalog;
 
-    // Reviewer toggle — superusers only
+    // Reviewer toggle
     const btnReviewer = document.getElementById("btn-reviewer-toggle");
-    if (AppState.isSuperuser) {
-      AppState.reviewerEnabled = true;
-      btnReviewer.classList.remove("hidden");
-      btnReviewer.onclick = () => {
-        AppState.reviewerEnabled = !AppState.reviewerEnabled;
-        btnReviewer.textContent = AppState.reviewerEnabled ? "Reviewer: ON" : "Reviewer: OFF";
-        btnReviewer.classList.toggle("reviewer-on",  AppState.reviewerEnabled);
-        btnReviewer.classList.toggle("reviewer-off", !AppState.reviewerEnabled);
-      };
-    } else {
-      btnReviewer.classList.add("hidden");
-    }
+    AppState.reviewerEnabled = true;
+    btnReviewer.classList.remove("hidden");
+    btnReviewer.onclick = () => {
+      AppState.reviewerEnabled = !AppState.reviewerEnabled;
+      btnReviewer.textContent = AppState.reviewerEnabled ? "Reviewer: ON" : "Reviewer: OFF";
+      btnReviewer.classList.toggle("reviewer-on",  AppState.reviewerEnabled);
+      btnReviewer.classList.toggle("reviewer-off", !AppState.reviewerEnabled);
+    };
 
     // Enter submits; Shift+Enter inserts newline
     document.getElementById("inp-chat").addEventListener("keydown", (e) => {
