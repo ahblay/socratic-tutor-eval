@@ -475,7 +475,7 @@ Analyze the topic below and produce a structured domain map. Think carefully abo
 
 1. **Core concepts** — The key ideas, ordered from foundational to advanced. Each \
    concept should represent a single atomic teaching unit: one idea, one rule, or \
-   one convention. As a test: if you cannot assign a single teaching approach to \
+   one convention. As a test: if you cannot assign a single `knowledge_type` to \
    the concept without hedging, split it into two separate concepts. Aim for \
    12–20 concepts for a typical article-length topic.
 2. **Required skills** — The reasoning abilities the student needs (e.g., "apply X \
@@ -487,6 +487,31 @@ Analyze the topic below and produce a structured domain map. Think carefully abo
    a student has genuinely understood a concept.
 6. **Engagement risk points** — Concepts likely to bore, frustrate, or distract the \
    student.
+
+## Knowledge Type Classification
+
+Every concept in `core_concepts` must have a `knowledge_type` and `reference_material`.
+
+**`knowledge_type`** — choose exactly one:
+- `convention`: An arbitrary rule, syntax, vocabulary term, or named standard the \
+  student cannot derive through reasoning — it must be told to them. Test: "Could a \
+  careful thinker figure this out without being shown?" If NO — convention.
+- `concept`: An idea the student can reason toward from first principles or prior \
+  knowledge through Socratic questioning.
+- `narrative`: A historical fact, origin story, named entity, or technical background \
+  that must be presented before reasoning is possible, but is not arbitrary syntax.
+
+**`reference_material`** — the text the tutor uses when opening this concept:
+- `convention`: The exact rule or syntax, ready to deliver verbatim. Always include \
+  a concrete example. E.g. "In lambda calculus, application is written by \
+  juxtaposition: `f a` means apply f to a. So `x x` means x applied to itself."
+- `concept`: A concrete scenario the student can reason about, written without \
+  revealing the answer. E.g. "Imagine two GPS devices store coordinates differently \
+  — one decimal degrees, one degrees-minutes-seconds. What problem arises when you \
+  try to share data between them?"
+- `narrative`: Key facts stated plainly as background. E.g. "GPX was developed by \
+  TopoGrafix in 2002 as an open XML schema for exchanging GPS tracks and waypoints \
+  between devices."
 
 ## TOPIC
 
@@ -503,7 +528,9 @@ Respond with ONLY a JSON object in this exact format:
       "concept": "concept name",
       "description": "one sentence",
       "prerequisite_for": ["list of concepts that depend on this one"],
-      "depth_priority": "essential|important|supplementary"
+      "depth_priority": "essential|important|supplementary",
+      "knowledge_type": "convention|concept|narrative",
+      "reference_material": "text the tutor presents or uses as a scenario seed"
     }}
   ],
   "required_skills": [
@@ -1028,7 +1055,7 @@ def compute_domain_map(topic: str, client: anthropic.Anthropic) -> dict:
     try:
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=8192,
+            max_tokens=16384,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.content[0].text.strip()
