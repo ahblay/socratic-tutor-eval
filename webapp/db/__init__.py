@@ -31,17 +31,17 @@ _MIGRATIONS = [
 async def _run_migrations() -> None:
     """Apply additive schema changes to existing databases.
 
-    Each statement is a no-op if the column already exists (SQLite raises
-    OperationalError: duplicate column name, which we silently swallow).
+    Each statement runs in its own transaction so that a failure on one
+    (e.g. duplicate column in PostgreSQL) does not abort subsequent ones.
     Fresh databases get the columns via create_all below, so these statements
-    are only meaningful for databases created before this migration was added.
+    are only meaningful for databases created before a migration was added.
     """
-    async with engine.begin() as conn:
-        for stmt in _MIGRATIONS:
-            try:
+    for stmt in _MIGRATIONS:
+        try:
+            async with engine.begin() as conn:
                 await conn.execute(text(stmt))
-            except Exception:
-                pass  # column already exists
+        except Exception:
+            pass  # column already exists
 
 
 async def init_db() -> None:
