@@ -10,20 +10,23 @@
 // ---------------------------------------------------------------------------
 
 const AppState = {
-  token:          null,
-  userId:         null,
+  token:           null,
+  userId:          null,
+  isSuperuser:     false,
 
-  articleId:      null,
-  articleTitle:   null,
-  articleSummary: null,
-  kcCount:        0,
+  articleId:       null,
+  articleTitle:    null,
+  articleSummary:  null,
+  kcCount:         0,
 
-  sessionId:      null,
-  sessionStatus:  null,
-  turnCount:      0,
+  sessionId:       null,
+  sessionStatus:   null,
+  turnCount:       0,
 
-  domainMap:      null,
-  bktSnapshot:    null,
+  domainMap:       null,
+  bktSnapshot:     null,
+
+  reviewerEnabled: true,
 };
 
 // ---------------------------------------------------------------------------
@@ -94,6 +97,10 @@ const App = (() => {
     if (token && Auth.isTokenValid()) {
       AppState.token  = token;
       AppState.userId = userId;
+      // Fetch superuser status (non-blocking — UI degrades gracefully on failure)
+      apiFetch("/api/auth/me").then(me => {
+        AppState.isSuperuser = !!me.is_superuser;
+      }).catch(() => {});
       transition("article");
       _wireArticlePhase();
     } else {
@@ -239,6 +246,21 @@ const App = (() => {
     document.getElementById("btn-end-session").onclick  = _endSession;
     document.getElementById("btn-back-catalog").onclick = _backToCatalog;
 
+    // Reviewer toggle — superusers only
+    const btnReviewer = document.getElementById("btn-reviewer-toggle");
+    if (AppState.isSuperuser) {
+      AppState.reviewerEnabled = true;
+      btnReviewer.classList.remove("hidden");
+      btnReviewer.onclick = () => {
+        AppState.reviewerEnabled = !AppState.reviewerEnabled;
+        btnReviewer.textContent = AppState.reviewerEnabled ? "Reviewer: ON" : "Reviewer: OFF";
+        btnReviewer.classList.toggle("reviewer-on",  AppState.reviewerEnabled);
+        btnReviewer.classList.toggle("reviewer-off", !AppState.reviewerEnabled);
+      };
+    } else {
+      btnReviewer.classList.add("hidden");
+    }
+
     // Enter submits; Shift+Enter inserts newline
     document.getElementById("inp-chat").addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -338,7 +360,7 @@ const App = (() => {
     try {
       const data = await apiFetch(`/api/sessions/${AppState.sessionId}/turn`, {
         method: "POST",
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, reviewer_enabled: AppState.reviewerEnabled }),
       });
 
       AppState.turnCount = data.turn_number;

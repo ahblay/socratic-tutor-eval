@@ -83,6 +83,17 @@ async def get_current_user(
 # Routes
 # ---------------------------------------------------------------------------
 
+@router.get("/me")
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Return basic profile for the authenticated user."""
+    return {
+        "user_id": current_user.id,
+        "email": current_user.email,
+        "is_superuser": current_user.is_superuser,
+        "credits_remaining": current_user.credits_remaining,
+    }
+
+
 @router.post("/register", response_model=TokenResponse)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if not body.consented:

@@ -38,6 +38,7 @@ class SessionResponse(BaseModel):
 
 class TurnRequest(BaseModel):
     message: str
+    reviewer_enabled: bool = True
 
 
 class TurnResponse(BaseModel):
@@ -248,7 +249,7 @@ async def post_turn(
     )
 
     # Call respond() in a thread pool (sync Anthropic SDK)
-    reply = await asyncio.to_thread(tutor.respond, body.message, history)
+    reply = await asyncio.to_thread(tutor.respond, body.message, history, body.reviewer_enabled)
 
     raw_reply = tutor._last_raw_response or reply
     tutor_state = tutor.session_state()

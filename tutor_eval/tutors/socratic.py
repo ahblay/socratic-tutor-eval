@@ -711,7 +711,7 @@ class SocraticTutor(AbstractTutor):
     # AbstractTutor interface
     # ------------------------------------------------------------------
 
-    def respond(self, student_message: str, history: list[dict]) -> str:
+    def respond(self, student_message: str, history: list[dict], reviewer_enabled: bool = True) -> str:
         """Generate the tutor's next reply."""
         self._state["turn_count"] += 1
         turn = self._state["turn_count"]
@@ -768,7 +768,11 @@ class SocraticTutor(AbstractTutor):
         clean_reply = self._extract_and_apply_state_update(raw_reply)
 
         # Guardrail: verify response is Socratic; reprompt tutor if not
-        reply = self._enforce_socratic(student_message, clean_reply, messages, system)
+        if reviewer_enabled:
+            reply = self._enforce_socratic(student_message, clean_reply, messages, system)
+        else:
+            self._last_reviewer_verdict = "disabled"
+            reply = clean_reply
 
         return reply
 

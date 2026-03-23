@@ -104,6 +104,8 @@ button { cursor: pointer; font-family: var(--font); font-size: .9rem; border: no
 }
 .btn-link:hover { color: var(--accent-hi); }
 .btn-link.small { font-size: .8rem; }
+.btn-link.reviewer-on  { color: var(--success); }
+.btn-link.reviewer-off { color: var(--warn); text-decoration-style: dashed; }
 
 /* ── Forms ── */
 input[type="text"],
