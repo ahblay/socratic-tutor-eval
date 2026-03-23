@@ -24,6 +24,7 @@ _MIGRATIONS = [
     "ALTER TABLE users    ADD COLUMN credits_remaining INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE users    ADD COLUMN is_superuser      BOOLEAN NOT NULL DEFAULT 0",
     "ALTER TABLE articles ADD COLUMN is_published      BOOLEAN NOT NULL DEFAULT 0",
+    "ALTER TABLE turns    ADD COLUMN reviewer_verdict  TEXT",
 ]
 
 

@@ -203,6 +203,7 @@ async def get_guardrail_review(
                 "role": t.role,
                 "content": t.content,
                 "raw_content": t.raw_content if t.role == "tutor" else None,
+                "reviewer_verdict": t.reviewer_verdict if t.role == "tutor" else None,
                 "guardrail_fired": (
                     t.raw_content is not None and t.raw_content != t.content
                     if t.role == "tutor" else None

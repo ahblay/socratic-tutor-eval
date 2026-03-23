@@ -225,14 +225,30 @@ class TestResponseGuardrail:
         result = tutor.respond("What is DNA?", [{"role": "student", "text": "What is DNA?"}])
         assert result == "What do you already know about this?"
 
-    def test_fail_returns_original_response(self):
-        """Rewrites are disabled — the original reply is returned even on fail."""
-        tutor = self._tutor_with_mock(
-            tutor_reply="DNA is a double helix made of nucleotides.",
-            reviewer_verdict='{"verdict": "fail", "violation": "states answer", "suggestion": "What do you think DNA might be made of?"}',
-        )
+    def test_fail_triggers_correction_reprompt(self):
+        """On fail, the tutor is reprompted and the corrected reply is returned."""
+        tutor = SocraticTutor("DNA", SAMPLE_DOMAIN_MAP)
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            MagicMock(content=[self._make_text_block("DNA is a double helix made of nucleotides.")]),
+            MagicMock(content=[self._make_text_block('{"verdict": "fail", "violation": "states answer", "suggestion": "What do you think DNA might be made of?"}')]),
+            MagicMock(content=[self._make_text_block("What do you think DNA might be made of?")]),
+        ]
+        tutor.client = mock_client
         result = tutor.respond("What is DNA?", [{"role": "student", "text": "What is DNA?"}])
-        assert result == "DNA is a double helix made of nucleotides."
+        assert result == "What do you think DNA might be made of?"
+        assert mock_client.messages.create.call_count == 3
+
+    def test_warn_returns_original_and_stores_verdict(self):
+        """On warn, the original reply is returned and the verdict is stored."""
+        tutor = self._tutor_with_mock(
+            tutor_reply="That's an interesting way to put it — what else do you notice?",
+            reviewer_verdict='{"verdict": "warn", "violation": "mild affirmation"}',
+        )
+        result = tutor.respond("DNA has two strands?", [{"role": "student", "text": "DNA has two strands?"}])
+        assert result == "That's an interesting way to put it — what else do you notice?"
+        assert tutor._last_reviewer_verdict == "warn"
+        assert tutor._last_reviewer_violation == "mild affirmation"
 
     def test_reviewer_called_on_every_turn(self):
         tutor = SocraticTutor("DNA", SAMPLE_DOMAIN_MAP)
@@ -273,6 +289,41 @@ class TestResponseGuardrail:
 
         result = tutor.respond("What is the answer?", [{"role": "student", "text": "What is the answer?"}])
         assert result == "Here is the answer: 42."  # falls back gracefully
+
+    def test_knowledge_type_injected_in_reviewer_prompt(self):
+        """Reviewer prompt contains the current concept's knowledge_type."""
+        convention_domain_map = {
+            "topic": "DNA",
+            "core_concepts": [
+                {
+                    "concept": "DNA Structure",
+                    "description": "...",
+                    "prerequisite_for": [],
+                    "depth_priority": "essential",
+                    "knowledge_type": "convention",
+                    "reference_material": "DNA uses A, T, G, C bases.",
+                },
+            ],
+            "recommended_sequence": ["DNA Structure"],
+            "common_misconceptions": [],
+            "checkpoint_questions": [],
+            "required_skills": [],
+            "prerequisite_knowledge": [],
+            "engagement_risk_points": [],
+        }
+        tutor = SocraticTutor("DNA", convention_domain_map)
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            MagicMock(content=[self._make_text_block("Before we go further, here is something you will need: DNA uses A, T, G, C bases. Which base pairs with which?")]),
+            MagicMock(content=[self._make_text_block('{"verdict": "pass"}')]),
+        ]
+        tutor.client = mock_client
+
+        tutor.respond("Tell me about DNA.", [{"role": "student", "text": "Tell me about DNA."}])
+
+        reviewer_call_kwargs = mock_client.messages.create.call_args_list[1][1]
+        reviewer_prompt = reviewer_call_kwargs["messages"][0]["content"]
+        assert "convention" in reviewer_prompt
 
 
 # ---------------------------------------------------------------------------

@@ -140,6 +140,8 @@ class Turn(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     # For tutor turns: raw pre-guardrail response (used for NAC metric)
     raw_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # For tutor turns: reviewer verdict ("pass" | "warn" | "fail" | None if skipped)
+    reviewer_verdict: Mapped[str | None] = mapped_column(String, nullable=True)
     # For tutor turns: SocraticTutor.session_state() snapshot (used for TSU metric)
     tutor_state_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -173,6 +173,7 @@ async def open_session(
         role="tutor",
         content=reply,
         raw_content=raw_reply,
+        reviewer_verdict=tutor._last_reviewer_verdict,
         tutor_state_snapshot=tutor_state,
     ))
 
@@ -272,6 +273,7 @@ async def post_turn(
         role="tutor",
         content=reply,
         raw_content=raw_reply,
+        reviewer_verdict=tutor._last_reviewer_verdict,
         tutor_state_snapshot=tutor_state,
     )
     db.add(tutor_turn)

@@ -296,31 +296,63 @@ direct answer.
 STUDENT MESSAGE:
 {student_message}
 
+CURRENT CONCEPT TYPE: {knowledge_type}
+
 TUTOR RESPONSE:
 {tutor_response}
 
-## Direct violations (always fail):
+## Convention and narrative nodes
+
+When CURRENT CONCEPT TYPE is "convention" or "narrative", the tutor is permitted \
+— and required — to present reference material directly before questioning. \
+Reference material delivery looks like:
+
+  "Before we go further, here is something you will need: [fact/syntax/rule]..."
+  "Here is some context you'll need: [background fact]..."
+  "Here's something concrete to work with: [example]..."
+
+These openings, followed immediately by a question about the presented material, \
+are CORRECT teaching moves and must NOT be flagged. Presenting a fact, syntax \
+rule, definition, or example the student cannot derive through reasoning, then \
+asking a question about it, is always a pass for these concept types.
+
+Exception: if the response presents reference material AND ALSO states or \
+confirms the answer to the question it then asks, that is still a fail.
+
+For CURRENT CONCEPT TYPE = "concept", ignore this section entirely.
+
+## Direct violations (always fail)
+
+These apply to ALL concept types:
 - States the correct answer explicitly ("The answer is X", "X is correct", \
   "That's because Y")
-- Confirms the student is right ("Exactly!", "Yes, that's correct", "You've got it")
+- Confirms the student is right ("Exactly!", "Yes, that's correct", "You've got it", \
+  "You're right", "That's correct")
 - Corrects the student with the right information ("Actually, it's X", \
   "You're close — it's really Y")
-- Provides an explanation or definition unprompted ("Z means X, which is why...")
-- Summarizes the content for the student
+- Summarizes the content in a way that substitutes for the student's own understanding
+- Works through a complete example that reveals the solution method
 
-## Subtle violations (also fail):
-- Leading questions that contain the answer ("Don't you think X is the case \
-  because of Y?")
-- Multiple-choice questions that reveal the answer set ("Is it A, B, or C?" \
-  where only one is plausible)
-- Affirming language that implies correctness ("Great observation! Now..." — \
-  implies the observation was correct)
-- Giving hints that contain the answer ("Think about what happens when \
-  temperature rises...")
-- Working through a similar example to demonstrate the method — the student \
-  must construct examples themselves, not watch one being solved
+These apply to "concept" nodes only (not "convention" or "narrative"):
+- Provides an unsolicited explanation or definition the student could have been \
+  led to discover through questioning
 
-## What is allowed (always pass):
+## Subtle violations (warn — do not rewrite)
+
+These are worth logging but do not warrant a rewrite:
+- Mild affirmation that slightly implies correctness without confirming a specific \
+  answer ("That's an interesting way to put it — now tell me...")
+- A question that leans slightly toward the answer without containing it
+- An acknowledgment warmer than strictly neutral that does not validate a specific \
+  claim ("You're right that this is confusing — what part specifically trips you up?")
+- Social or emotional acknowledgment ("That's on me for not being clearer", \
+  "I've been asking you to repeat yourself — fair point")
+
+Test: would a reasonable observer say the tutor gave away information, or just \
+showed warmth? Warmth alone = warn. Information given away = fail.
+
+## What is always allowed (pass)
+
 - Open-ended questions about the student's own thinking
 - Requests for examples, definitions, or elaboration from the student
 - Questions that expose contradictions without revealing what the contradiction \
@@ -328,15 +360,19 @@ TUTOR RESPONSE:
 - Neutral acknowledgments that don't imply correctness \
   ("You mentioned X — tell me more about that")
 - Asking the student to relate two concepts without indicating how they relate
+- Reference material delivery for convention/narrative nodes (see above)
 
 ## Your output
 
-Respond with ONLY a JSON object in this exact format:
+Respond with ONLY a JSON object in one of these exact formats:
 
 If the response passes:
 {{"verdict": "pass"}}
 
-If the response fails:
+If the response has a minor issue (warn — do NOT rewrite):
+{{"verdict": "warn", "violation": "brief description of the mild issue"}}
+
+If the response has a clear violation (fail — rewrite needed):
 {{"verdict": "fail", "violation": "brief description of what rule was broken", \
 "suggestion": "a rewritten version that asks a question instead"}}
 
@@ -628,6 +664,8 @@ class SocraticTutor(AbstractTutor):
         self._last_raw_response: str | None = None
         self._last_thinking: str | None = None
         self._last_usage: dict | None = None  # {"input_tokens": int, "output_tokens": int}
+        self._last_reviewer_verdict: str | None = None
+        self._last_reviewer_violation: str | None = None
 
         if state is not None:
             self._state = deepcopy(state)
@@ -878,6 +916,21 @@ class SocraticTutor(AbstractTutor):
     # Response guardrail
     # ------------------------------------------------------------------
 
+    def _get_current_knowledge_type(self) -> str:
+        """Return the knowledge_type of the current concept, defaulting to 'concept'."""
+        try:
+            sequence = self.domain_map.get("recommended_sequence", [])
+            idx = self._state.get("current_concept_index", 0)
+            if not sequence or idx >= len(sequence):
+                return "concept"
+            concept_name = sequence[idx]
+            concepts = {c["concept"]: c for c in self.domain_map.get("core_concepts", [])}
+            node = concepts.get(concept_name, {})
+            kt = node.get("knowledge_type", "concept")
+            return kt if kt in ("convention", "narrative", "concept") else "concept"
+        except Exception:
+            return "concept"
+
     def _enforce_socratic(
         self,
         student_message: str,
@@ -890,10 +943,14 @@ class SocraticTutor(AbstractTutor):
         Socratic tutor (one retry) so it self-corrects. Uses Haiku for the
         review check; Sonnet for the correction.
         """
+        knowledge_type = self._get_current_knowledge_type()
         prompt = _RESPONSE_REVIEWER_PROMPT.format(
             student_message=student_message,
+            knowledge_type=knowledge_type,
             tutor_response=reply,
         )
+        self._last_reviewer_verdict = None
+        self._last_reviewer_violation = None
         raw = ""
         try:
             result = self.client.messages.create(
@@ -906,10 +963,20 @@ class SocraticTutor(AbstractTutor):
             raw = re.sub(r"\s*```$", "", raw)
             data = json.loads(raw)
 
-            if data.get("verdict") != "fail":
+            verdict = data.get("verdict", "pass")
+            self._last_reviewer_verdict = verdict
+            self._last_reviewer_violation = data.get("violation")
+
+            if verdict == "pass":
                 print("  [response-reviewer] pass", file=sys.stderr)
                 return reply
 
+            if verdict == "warn":
+                violation = data.get("violation", "minor issue")
+                print(f"  [response-reviewer] WARN — {violation}", file=sys.stderr)
+                return reply
+
+            # verdict == "fail"
             violation = data.get("violation", "unspecified violation")
             print(f"  [response-reviewer] FAIL — {violation}", file=sys.stderr)
 
