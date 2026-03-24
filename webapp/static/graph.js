@@ -250,7 +250,7 @@ const KCGraph = (() => {
       obsList.appendChild(chip);
     }
 
-    if (obsSection) {
+    if (obsSection && typeof AppState !== 'undefined' && AppState.isSuperuser) {
       obsSection.classList.remove('hidden');
       const resizeHandle = document.getElementById('obs-resize-handle');
       if (resizeHandle) resizeHandle.classList.remove('hidden');

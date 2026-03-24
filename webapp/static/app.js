@@ -250,10 +250,12 @@ const App = (() => {
     document.getElementById("btn-end-session").onclick  = _endSession;
     document.getElementById("btn-back-catalog").onclick = _backToCatalog;
 
-    // Reviewer toggle
+    // Reviewer toggle — off by default
     const btnReviewer = document.getElementById("btn-reviewer-toggle");
-    AppState.reviewerEnabled = true;
-    btnReviewer.classList.remove("hidden");
+    AppState.reviewerEnabled = false;
+    btnReviewer.textContent = "Reviewer: OFF";
+    btnReviewer.classList.remove("hidden", "reviewer-on");
+    btnReviewer.classList.add("reviewer-off");
     btnReviewer.onclick = () => {
       AppState.reviewerEnabled = !AppState.reviewerEnabled;
       btnReviewer.textContent = AppState.reviewerEnabled ? "Reviewer: ON" : "Reviewer: OFF";

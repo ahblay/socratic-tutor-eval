@@ -475,7 +475,7 @@ input:focus { border-color: var(--accent); }
   font-size: .9rem;
   resize: vertical;
   min-height: 44px;
-  max-height: 120px;
+  max-height: 300px;
   outline: none;
   line-height: 1.45;
 }
