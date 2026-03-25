@@ -337,7 +337,9 @@ const App = (() => {
   function startTutoring() {
     AppState.sessionStatus = "active";
     Chat.setPhaseLabel("Tutoring");
-    document.getElementById("btn-end-session").classList.remove("hidden");
+    if (AppState.isSuperuser) {
+      document.getElementById("btn-end-session").classList.remove("hidden");
+    }
     Chat.unlockInput();
 
     // (Re-)load graph state: assessment has just written initial knowledge estimates;
