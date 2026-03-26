@@ -9,11 +9,14 @@ FastAPI dependency graph stays simple.
 
 Endpoints
 ---------
-POST /api/admin/users/{user_id}/credits       — add credits to a user
-POST /api/admin/articles/{article_id}/publish — make article visible in catalog
+POST /api/admin/users/{user_id}/credits              — add credits to a user
+POST /api/admin/articles/{article_id}/publish        — make article visible in catalog
 POST /api/admin/articles/{article_id}/unpublish
-GET  /api/admin/users                         — list all users with credit balances
-GET  /api/admin/users/{user_id}/sessions      — list all sessions for a user
+GET  /api/admin/users                                — list all users with credit balances
+GET  /api/admin/users/{user_id}/sessions             — list all sessions for a user
+GET  /api/admin/sessions/{session_id}/transcript     — full transcript (stripped)
+GET  /api/admin/sessions/{session_id}/guardrail-review — transcript with NAC metadata
+GET  /api/admin/sessions/{session_id}/analysis-input — everything needed for analyze_transcript()
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from webapp.api.auth import get_current_user
 from webapp.db import get_db
-from webapp.db.models import Article, Assessment, Session, Turn, User
+from webapp.db.models import Article, Assessment, BKTStateRow, Session, Turn, User
 
 router = APIRouter()
 
@@ -259,3 +262,106 @@ async def unpublish_article(
     article.is_published = False
     await db.commit()
     return {"article_id": article_id, "is_published": False}
+
+
+# ---------------------------------------------------------------------------
+# Analysis input
+# ---------------------------------------------------------------------------
+
+@router.get("/sessions/{session_id}/analysis-input")
+async def get_analysis_input(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return everything needed to run analyze_transcript() on a session:
+
+    - domain_map:          KC graph from the article
+    - bkt_initial_states:  per-KC p_mastered values written after assessment completes;
+                           empty dict when no assessment was recorded (analyzer uses fallback)
+    - assessment_turns:    ordered assessment Q&A pairs with observation_class
+    - lesson_turns:        ordered lesson turns with raw_content, reviewer_verdict,
+                           tutor_state_snapshot, and evaluator_snapshot (null for webapp
+                           sessions; populated in simulation logs)
+    """
+    _require_superuser(current_user)
+
+    result = await db.execute(
+        select(Session, Article)
+        .join(Article, Session.article_id == Article.id)
+        .where(Session.id == session_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session, article = row
+
+    if article.domain_map is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Domain map not ready for this article",
+        )
+
+    # BKT initial states — written to bkt_states after assessment completes.
+    # Keyed by (user_id, article_id), so they persist across sessions on the same article.
+    bkt_result = await db.execute(
+        select(BKTStateRow)
+        .where(BKTStateRow.user_id == session.user_id)
+        .where(BKTStateRow.article_id == session.article_id)
+    )
+    bkt_initial_states = {
+        row.kc_id: {
+            "p_mastered": row.p_mastered,
+            "knowledge_class": row.knowledge_class,
+            "observation_history": row.observation_history,
+        }
+        for row in bkt_result.scalars().all()
+    }
+
+    # Assessment turns — only rows where the student actually answered
+    assessment_result = await db.execute(
+        select(Assessment)
+        .where(Assessment.session_id == session_id)
+        .where(Assessment.user_answer.is_not(None))
+        .order_by(Assessment.question_index)
+    )
+    assessment_turns = [
+        {
+            "question_index": a.question_index,
+            "kc_id": a.kc_id,
+            "question_text": a.question_text,
+            "user_answer": a.user_answer,
+            "observation_class": a.observation_class,
+        }
+        for a in assessment_result.scalars().all()
+    ]
+
+    # Lesson turns — full metadata for evaluation
+    turns_result = await db.execute(
+        select(Turn)
+        .where(Turn.session_id == session_id)
+        .order_by(Turn.turn_number)
+    )
+    lesson_turns = [
+        {
+            "turn_number": t.turn_number,
+            "role": t.role,
+            "content": t.content,
+            "raw_content": t.raw_content,
+            "reviewer_verdict": t.reviewer_verdict,
+            "tutor_state_snapshot": t.tutor_state_snapshot,
+            "evaluator_snapshot": t.evaluator_snapshot,
+        }
+        for t in turns_result.scalars().all()
+    ]
+
+    return {
+        "session_id": session_id,
+        "article_id": session.article_id,
+        "article_title": article.canonical_title,
+        "domain_map": article.domain_map,
+        "bkt_initial_states": bkt_initial_states,
+        "assessment_turns": assessment_turns,
+        "lesson_turns": lesson_turns,
+    }

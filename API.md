@@ -195,6 +195,119 @@ curl -s -X POST http://localhost:8000/api/auth/login \
 
 ---
 
+## Post-Hoc Evaluation
+
+### Get analysis input for a session
+
+Returns everything `analyze_transcript()` needs in one call: domain map, BKT initial
+states (from assessment), assessment turns, and lesson turns with full evaluation metadata.
+
+```bash
+curl -s http://localhost:8000/api/admin/sessions/<session_id>/analysis-input \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+**Response shape:**
+```json
+{
+  "session_id": "...",
+  "article_id": "...",
+  "article_title": "...",
+  "domain_map": { ... },
+  "bkt_initial_states": {
+    "<kc_id>": { "p_mastered": 0.1, "knowledge_class": "absent", "observation_history": [] }
+  },
+  "assessment_turns": [
+    { "question_index": 0, "kc_id": "...", "question_text": "...", "user_answer": "...", "observation_class": "weak_articulation" }
+  ],
+  "lesson_turns": [
+    { "turn_number": 1, "role": "tutor", "content": "...", "raw_content": "...", "reviewer_verdict": "pass", "tutor_state_snapshot": {...}, "evaluator_snapshot": null }
+  ]
+}
+```
+
+`bkt_initial_states` is empty when no assessment was recorded — `analyze_transcript()`
+uses the fallback initialization (prerequisite KCs at p=0.90, target KCs at p=0.10).
+
+`evaluator_snapshot` is `null` for webapp sessions and populated for simulation JSONL
+sessions. The analyzer uses it as a shortcut when available; otherwise replays BKT.
+
+---
+
+## Post-Hoc Analysis — Trigger and Retrieve
+
+### Trigger analysis for a session
+
+Runs `analyze_transcript()` in the background and stores the result.  Returns
+immediately with `"analysis_status": "pending"`.
+
+```bash
+curl -s -X POST http://localhost:8000/api/export/sessions/<session_id>/analyze \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+**Response:**
+```json
+{ "session_id": "...", "analysis_status": "pending" }
+```
+
+**Status flow:** `pending` → `running` → `ready` (or `failed` on error).
+
+Re-triggering an already-`ready` session is allowed (re-runs the analysis).
+Returns 409 if analysis is currently `running`.
+
+### Retrieve analysis results
+
+```bash
+curl -s http://localhost:8000/api/export/sessions/<session_id>/analysis \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+**Response when ready:**
+```json
+{
+  "session_id": "...",
+  "analysis_status": "ready",
+  "analysis": {
+    "session_id": "...",
+    "article_id": "...",
+    "nac": 0.95,
+    "kft": 0.72,
+    "pr": 0.88,
+    "lcq": 0.61,
+    "mrq": 1.0,
+    "mrq_adjustment": 0.075,
+    "composite": 0.74,
+    "total_tutor_turns": 18,
+    "is_valid": true,
+    "reviewer_active": true,
+    "reviewer_rewrite_count": 2,
+    "turn_results": [ ... ]
+  }
+}
+```
+
+**Response while pending/running:**
+```json
+{ "session_id": "...", "analysis_status": "running", "analysis": null }
+```
+
+### Offline CLI (no server required)
+
+```bash
+# Fetch analysis input first
+curl -s http://localhost:8000/api/admin/sessions/<session_id>/analysis-input \
+  -H "Authorization: Bearer $TOKEN" > session_input.json
+
+# Score locally
+python score.py session_input.json
+
+# Disable NAC (faster, skips per-turn Haiku calls)
+python score.py session_input.json --no-nac --output result.json
+```
+
+---
+
 ## Troubleshooting
 
 ### 401 Unauthorized
