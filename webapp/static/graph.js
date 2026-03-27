@@ -87,7 +87,7 @@ const KCGraph = (() => {
       const id    = slugify(c.concept);
       const p     = bktSnapshot[id] ?? 0;
       const fill  = knowledgeColor(p);
-      const label = wrapLabel(c.concept);
+      const label = wrapLabel(c.concept.replace(/"/g, "'"));
       // Active: tutor is currently working on this concept
       const isActive  = activeConceptName && c.concept === activeConceptName;
       const seqIdx    = _sequence.indexOf(c.concept);
