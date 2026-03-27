@@ -172,8 +172,12 @@ AVAILABLE KCs (id: name):
 {kc_listing}
 
 OBSERVATION CLASSES (choose exactly one per KC that is engaged):
-- strong_articulation  : student explains the KC correctly in their own words, unprompted
-- weak_articulation    : student gives a correct but minimal or fragmented response about the KC
+- strong_articulation  : student correctly and completely articulates the KC — may be brief or
+                         stated in shorthand, but demonstrates clear understanding with no
+                         significant conceptual gaps
+- weak_articulation    : student's response is directionally correct but conceptually incomplete —
+                         key elements are missing, the reasoning is only partially developed, or
+                         the student appears to be approximating the right answer
 - guided_recognition   : student gets it right only after obvious scaffolding visible in the message
 - absent               : KC is not engaged this turn (do NOT include in output)
 - misconception        : student states a factually wrong belief about the KC
