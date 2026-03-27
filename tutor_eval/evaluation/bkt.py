@@ -35,6 +35,7 @@ OBSERVATION_CLASSES = [
     "absent",
     "misconception",
     "contradiction",
+    "tangent_initiation",
 ]
 
 _OBS_CORRECT_WEIGHT: dict[str, float | None] = {
@@ -44,6 +45,7 @@ _OBS_CORRECT_WEIGHT: dict[str, float | None] = {
     "absent":              None,
     "misconception":       0.0,
     "contradiction":       0.0,
+    "tangent_initiation":  None,
 }
 
 
@@ -182,6 +184,9 @@ OBSERVATION CLASSES (choose exactly one per KC that is engaged):
 - absent               : KC is not engaged this turn (do NOT include in output)
 - misconception        : student states a factually wrong belief about the KC
 - contradiction        : student contradicts something they said earlier about this KC
+- tangent_initiation   : student asks a clarifying question or redirects to a related topic rather
+                         than answering — reflects a navigation request or curiosity, not a knowledge
+                         failure; do NOT update BKT for this class
 
 STUDENT MESSAGE:
 {student_message}
