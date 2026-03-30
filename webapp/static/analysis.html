@@ -88,6 +88,10 @@ header {
   background: #3b82f6; color: #fff;
   font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 99px;
 }
+.t-badge-assess {
+  background: #7c3aed; color: #ede9fe;
+  font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 99px;
+}
 
 /* Chips */
 .chip {
@@ -122,6 +126,28 @@ header {
 .obs-list { display: flex; flex-wrap: wrap; gap: 4px; min-height: 20px; }
 .obs-chip {
   font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 600;
+}
+
+/* BKT mastery bars */
+.bkt-section {
+  padding: 6px 12px 8px; border-bottom: 1px solid #1e293b;
+  flex-shrink: 0; max-height: 130px; overflow-y: auto;
+}
+.bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.bar-label {
+  font-size: 10px; color: #94a3b8; width: 110px; flex-shrink: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bar-track {
+  flex: 1; background: #1e293b; border-radius: 99px; height: 7px; overflow: hidden;
+}
+.bar-fill {
+  height: 100%; border-radius: 99px;
+  transition: width 0.4s ease, background-color 0.4s ease;
+}
+.bar-val {
+  font-size: 10px; color: #64748b; width: 30px; text-align: right;
+  flex-shrink: 0; font-variant-numeric: tabular-nums;
 }
 
 /* Dialogue */
@@ -183,6 +209,11 @@ input[type=range] { flex: 1; accent-color: #3b82f6; cursor: pointer; }
     <div class="obs-section">
       <div class="section-label">Preceding observations</div>
       <div class="obs-list" id="obs-list"></div>
+    </div>
+
+    <div class="bkt-section">
+      <div class="section-label">KC mastery (BKT)</div>
+      <div id="bkt-bars"></div>
     </div>
 
     <div class="dialogue" id="dialogue"></div>
@@ -271,7 +302,6 @@ function escHtml(s) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function computeFrontier(bkt, concepts) {
-  // Build: conceptName → list of prerequisite conceptNames
   const prereqsOf = {};
   for (const c of concepts) {
     for (const downstream of (c.prerequisite_for || [])) {
@@ -282,7 +312,7 @@ function computeFrontier(bkt, concepts) {
   const frontier = [];
   for (const c of concepts) {
     const id = slugify(c.concept);
-    if ((bkt[id] ?? 0) >= 0.7) continue;  // already mastered
+    if ((bkt[id] ?? 0) >= 0.7) continue;
     const prereqs = prereqsOf[c.concept] || [];
     if (prereqs.every(p => (bkt[slugify(p)] ?? 0) >= 0.7)) frontier.push(id);
   }
@@ -347,7 +377,6 @@ function renderGraph(bkt, targetedKcId, frontier, concepts) {
     svgEl.setAttribute('width', '100%');
     svgEl.setAttribute('height', '100%');
     svgEl.style.cssText = 'display:block;';
-    // Remove old SVG but keep loading indicator
     for (const child of [...container.children]) {
       if (!child.classList.contains('graph-loading')) child.remove();
     }
@@ -358,6 +387,27 @@ function renderGraph(bkt, targetedKcId, frontier, concepts) {
     });
   } catch (e) {
     console.error('[analysis] viz.js error:', e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BKT mastery bars
+// ─────────────────────────────────────────────────────────────────────────────
+
+function renderBktBars(bkt, concepts) {
+  const container = document.getElementById('bkt-bars');
+  container.innerHTML = '';
+  for (const c of concepts) {
+    const id = slugify(c.concept);
+    const p  = Math.min(1, Math.max(0, bkt[id] ?? 0));
+    const color = masteryColor(p);
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML =
+      `<span class="bar-label" title="${escHtml(c.concept)}">${escHtml(c.concept)}</span>` +
+      `<div class="bar-track"><div class="bar-fill" style="width:${Math.round(p*100)}%;background-color:${color}"></div></div>` +
+      `<span class="bar-val">${Math.round(p*100)}%</span>`;
+    container.appendChild(row);
   }
 }
 
@@ -436,8 +486,9 @@ function appendChip(container, el) {
 // Frame renderer
 // ─────────────────────────────────────────────────────────────────────────────
 
-let DATA      = null;
-let FRAME_IDX = 0;
+let DATA       = null;
+let ALL_FRAMES = [];   // [assessment_frame?, ...lesson_frames]
+let FRAME_IDX  = 0;
 
 function renderMetrics(metrics) {
   const bar = document.getElementById('metrics-bar');
@@ -464,21 +515,68 @@ function renderMetrics(metrics) {
 function renderFrame(idx) {
   if (!DATA || !VIZ) return;
   FRAME_IDX = idx;
-  const frame    = DATA.frames[idx];
+  const frame    = ALL_FRAMES[idx];
   const concepts = DATA.domain_map?.core_concepts || [];
 
-  // Header indicators
-  document.getElementById('turn-indicator').textContent = `T${frame.turn_number}`;
   document.getElementById('slider').value = idx;
-  document.getElementById('tl-info').textContent = `${idx + 1} / ${DATA.frames.length}`;
+  document.getElementById('tl-info').textContent = `${idx + 1} / ${ALL_FRAMES.length}`;
 
-  // Frontier from BKT snapshot for this turn
-  const frontier = computeFrontier(frame.bkt_snapshot || {}, concepts);
+  const bkt      = frame.bkt_snapshot || {};
+  const frontier = computeFrontier(bkt, concepts);
+  const targeted = frame._type === 'lesson' ? frame.targeted_kc_id : null;
 
-  // Graph
-  renderGraph(frame.bkt_snapshot || {}, frame.targeted_kc_id, frontier, concepts);
+  renderGraph(bkt, targeted, frontier, concepts);
+  renderBktBars(bkt, concepts);
 
-  // ── Turn header chips ────────────────────────────────────────────────────
+  if (frame._type === 'assessment') {
+    _renderAssessmentFrame(frame, concepts);
+  } else {
+    _renderLessonFrame(frame, concepts);
+  }
+
+  document.getElementById('dialogue').scrollTop = 0;
+}
+
+function _renderAssessmentFrame(frame, concepts) {
+  document.getElementById('turn-indicator').textContent = 'Assess';
+
+  // Turn header
+  const header = document.getElementById('turn-header');
+  header.innerHTML = '';
+  const badge = document.createElement('span');
+  badge.className = 't-badge-assess';
+  badge.textContent = `Assessment · ${frame.assessment_turns.length} question${frame.assessment_turns.length !== 1 ? 's' : ''}`;
+  header.appendChild(badge);
+
+  // No observations for assessment
+  document.getElementById('obs-list').innerHTML = '';
+
+  // Dialogue: each Q&A pair, tutor question first
+  const dialogue = document.getElementById('dialogue');
+  dialogue.innerHTML = '';
+  for (const at of frame.assessment_turns) {
+    const kcName = concepts.find(c => slugify(c.concept) === at.kc_id)?.concept || at.kc_id;
+
+    const tb = document.createElement('div');
+    tb.className = 'bubble tutor';
+    tb.innerHTML = `<div class="bubble-label">Assessment · ${escHtml(kcName)}</div>${escHtml(at.question_text)}`;
+    dialogue.appendChild(tb);
+
+    if (at.user_answer) {
+      const meta = OBS_META[at.observation_class] || OBS_META.absent;
+      const sb = document.createElement('div');
+      sb.className = 'bubble student';
+      sb.innerHTML = `<div class="bubble-label">Student</div>${escHtml(at.user_answer)}`
+                   + `<div style="margin-top:6px"><span class="obs-chip" style="background:${meta.bg};color:${meta.fg}">${meta.label}</span></div>`;
+      dialogue.appendChild(sb);
+    }
+  }
+}
+
+function _renderLessonFrame(frame, concepts) {
+  document.getElementById('turn-indicator').textContent = `T${frame.turn_number}`;
+
+  // Turn header chips
   const header = document.getElementById('turn-header');
   header.innerHTML = '';
 
@@ -487,7 +585,6 @@ function renderFrame(idx) {
   tbadge.textContent = `Turn ${frame.turn_number}`;
   header.appendChild(tbadge);
 
-  // KC name chip
   if (frame.targeted_kc_id) {
     const kcName = concepts.find(c => slugify(c.concept) === frame.targeted_kc_id)?.concept
                    || frame.targeted_kc_id;
@@ -506,7 +603,7 @@ function renderFrame(idx) {
     header.appendChild(chip('Misconception ignored ✗', 'chip-mrq-ignore'));
   }
 
-  // ── Preceding observations ───────────────────────────────────────────────
+  // Preceding observations
   const obsList = document.getElementById('obs-list');
   obsList.innerHTML = '';
   for (const obs of (frame.preceding_observations || [])) {
@@ -520,16 +617,9 @@ function renderFrame(idx) {
     obsList.appendChild(c);
   }
 
-  // ── Dialogue ─────────────────────────────────────────────────────────────
+  // Dialogue: tutor response first, then preceding student message
   const dialogue = document.getElementById('dialogue');
   dialogue.innerHTML = '';
-
-  if (frame.student_message) {
-    const b = document.createElement('div');
-    b.className = 'bubble student';
-    b.innerHTML = `<div class="bubble-label">Student</div>${escHtml(frame.student_message)}`;
-    dialogue.appendChild(b);
-  }
 
   if (frame.tutor_response) {
     const b = document.createElement('div');
@@ -538,14 +628,19 @@ function renderFrame(idx) {
     dialogue.appendChild(b);
   }
 
-  if (!frame.student_message && !frame.tutor_response) {
+  if (frame.student_message) {
+    const b = document.createElement('div');
+    b.className = 'bubble student';
+    b.innerHTML = `<div class="bubble-label">Student</div>${escHtml(frame.student_message)}`;
+    dialogue.appendChild(b);
+  }
+
+  if (!frame.tutor_response && !frame.student_message) {
     const b = document.createElement('div');
     b.className = 'bubble empty';
     b.textContent = 'No dialogue data for this turn.';
     dialogue.appendChild(b);
   }
-
-  dialogue.scrollTop = 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -634,10 +729,24 @@ async function loadData() {
     return;
   }
 
+  // Build ALL_FRAMES: optional assessment frame first, then lesson frames
+  ALL_FRAMES = [];
+  if (DATA.assessment_turns?.length) {
+    // Use the first lesson frame's BKT snapshot — the post-assessment knowledge state
+    ALL_FRAMES.push({
+      _type:            'assessment',
+      bkt_snapshot:     DATA.frames[0].bkt_snapshot || {},
+      assessment_turns: DATA.assessment_turns,
+    });
+  }
+  for (const f of DATA.frames) {
+    ALL_FRAMES.push({ _type: 'lesson', ...f });
+  }
+
   // Slider
   const slider = document.getElementById('slider');
   slider.min   = 0;
-  slider.max   = DATA.frames.length - 1;
+  slider.max   = ALL_FRAMES.length - 1;
   slider.value = 0;
   slider.addEventListener('input', () => renderFrame(parseInt(slider.value)));
 
@@ -645,14 +754,13 @@ async function loadData() {
     if (FRAME_IDX > 0) renderFrame(FRAME_IDX - 1);
   });
   document.getElementById('btn-next').addEventListener('click', () => {
-    if (FRAME_IDX < DATA.frames.length - 1) renderFrame(FRAME_IDX + 1);
+    if (FRAME_IDX < ALL_FRAMES.length - 1) renderFrame(FRAME_IDX + 1);
   });
 
-  // Keyboard navigation
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT') return;
-    if (e.key === 'ArrowLeft'  && FRAME_IDX > 0)                      renderFrame(FRAME_IDX - 1);
-    if (e.key === 'ArrowRight' && FRAME_IDX < DATA.frames.length - 1) renderFrame(FRAME_IDX + 1);
+    if (e.key === 'ArrowLeft'  && FRAME_IDX > 0)                       renderFrame(FRAME_IDX - 1);
+    if (e.key === 'ArrowRight' && FRAME_IDX < ALL_FRAMES.length - 1)   renderFrame(FRAME_IDX + 1);
   });
 
   hideOverlay();

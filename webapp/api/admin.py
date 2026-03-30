@@ -412,6 +412,23 @@ async def get_analysis_view(
     all_turns = turns_result.scalars().all()
     turns_by_number = {t.turn_number: t for t in all_turns}
 
+    assessment_result = await db.execute(
+        select(Assessment)
+        .where(Assessment.session_id == session_id)
+        .where(Assessment.user_answer.is_not(None))
+        .order_by(Assessment.question_index)
+    )
+    assessment_turns = [
+        {
+            "question_index":   a.question_index,
+            "kc_id":            a.kc_id,
+            "question_text":    a.question_text,
+            "user_answer":      a.user_answer,
+            "observation_class": a.observation_class,
+        }
+        for a in assessment_result.scalars().all()
+    ]
+
     frames = []
     for tr in analysis.get("turn_results", []):
         tn = tr.get("turn_number")
@@ -449,9 +466,10 @@ async def get_analysis_view(
     metrics = {k: analysis.get(k) for k in metrics_keys}
 
     return {
-        "session_id":    session_id,
-        "article_title": article.canonical_title,
-        "domain_map":    article.domain_map,
-        "metrics":       metrics,
-        "frames":        frames,
+        "session_id":       session_id,
+        "article_title":    article.canonical_title,
+        "domain_map":       article.domain_map,
+        "metrics":          metrics,
+        "assessment_turns": assessment_turns,
+        "frames":           frames,
     }
