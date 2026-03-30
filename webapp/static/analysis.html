@@ -531,7 +531,7 @@ function renderFrame(idx) {
   if (frame._type === 'assessment') {
     _renderAssessmentFrame(frame, concepts);
   } else {
-    _renderLessonFrame(frame, concepts);
+    _renderLessonFrame(frame, concepts, idx);
   }
 
   document.getElementById('dialogue').scrollTop = 0;
@@ -573,7 +573,7 @@ function _renderAssessmentFrame(frame, concepts) {
   }
 }
 
-function _renderLessonFrame(frame, concepts) {
+function _renderLessonFrame(frame, concepts, frameIdx) {
   document.getElementById('turn-indicator').textContent = `T${frame.turn_number}`;
 
   // Turn header chips
@@ -617,7 +617,9 @@ function _renderLessonFrame(frame, concepts) {
     obsList.appendChild(c);
   }
 
-  // Dialogue: tutor response first, then preceding student message
+  // Dialogue: tutor question first, then student's reply to that question.
+  // The student's reply to frame N lives in frame N+1's student_message,
+  // because student_message stores the answer to the *preceding* tutor turn.
   const dialogue = document.getElementById('dialogue');
   dialogue.innerHTML = '';
 
@@ -628,14 +630,16 @@ function _renderLessonFrame(frame, concepts) {
     dialogue.appendChild(b);
   }
 
-  if (frame.student_message) {
+  const nextLesson = ALL_FRAMES[frameIdx + 1];
+  const studentReply = (nextLesson?._type === 'lesson') ? nextLesson.student_message : null;
+  if (studentReply) {
     const b = document.createElement('div');
     b.className = 'bubble student';
-    b.innerHTML = `<div class="bubble-label">Student</div>${escHtml(frame.student_message)}`;
+    b.innerHTML = `<div class="bubble-label">Student</div>${escHtml(studentReply)}`;
     dialogue.appendChild(b);
   }
 
-  if (!frame.tutor_response && !frame.student_message) {
+  if (!frame.tutor_response && !studentReply) {
     const b = document.createElement('div');
     b.className = 'bubble empty';
     b.textContent = 'No dialogue data for this turn.';
