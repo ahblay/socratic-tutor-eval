@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Analysis</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0f172a; color: #e2e8f0;
+  height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* ── Header ── */
+header {
+  padding: 8px 18px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  flex-wrap: wrap; min-height: 48px;
+}
+.hdr-label {
+  font-size: 11px; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: .08em; flex-shrink: 0;
+}
+.article-title {
+  font-size: 14px; font-weight: 500; color: #e2e8f0; flex-shrink: 0;
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.validity-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 99px; flex-shrink: 0;
+}
+.validity-valid   { background: #14532d; color: #86efac; }
+.validity-invalid { background: #7f1d1d; color: #fca5a5; }
+.turn-indicator {
+  background: #1e3a5f; color: #7dd3fc; border: 1px solid #1d4ed8;
+  font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px;
+  flex-shrink: 0; min-width: 54px; text-align: center;
+}
+
+/* ── Metrics bar ── */
+.metrics-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.metric-chip {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 3px 10px; border-radius: 7px; min-width: 50px;
+  background: #0f172a; border: 1px solid #334155; cursor: default;
+}
+.metric-label {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: #64748b;
+}
+.metric-value { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.score-high  { color: #22c55e; }
+.score-mid   { color: #f59e0b; }
+.score-low   { color: #ef4444; }
+.score-none  { color: #475569; }
+
+/* ── Layout ── */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Graph panel ── */
+.graph-wrap {
+  flex: 0 0 52%; display: flex; flex-direction: column;
+  border-right: 1px solid #1e293b; overflow: hidden;
+}
+.graph-caption {
+  font-size: 10px; color: #64748b; text-transform: uppercase;
+  letter-spacing: .1em; padding: 5px 16px 3px; flex-shrink: 0;
+}
+#kg-container { flex: 1; overflow: hidden; position: relative; }
+#kg-container svg { width: 100%; height: 100%; display: block; }
+.graph-loading {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; color: #475569; font-size: 12px;
+}
+
+/* ── Side panel ── */
+.side { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* Turn header */
+.turn-header {
+  padding: 7px 12px 6px; border-bottom: 1px solid #1e293b;
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap;
+}
+.t-badge {
+  background: #3b82f6; color: #fff;
+  font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 99px;
+}
+
+/* Chips */
+.chip {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: 99px; display: inline-block;
+}
+.chip-compliant  { background: #14532d; color: #86efac; }
+.chip-violation  { background: #7f1d1d; color: #fca5a5; }
+.chip-disabled   { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+.chip-frontier   { background: #451a03; color: #fbbf24; }
+.chip-mastered   { background: #14532d; color: #86efac; }
+.chip-prereqs    { background: #431407; color: #fb923c; }
+.chip-offmap     { background: #1e293b; color: #94a3b8; }
+.chip-stall      { background: #4c1d95; color: #c4b5fd; }
+.chip-match      { background: #14532d; color: #86efac; }
+.chip-mismatch   { background: #7f1d1d; color: #fca5a5; }
+.chip-warn       { background: #713f12; color: #fde68a; }
+.chip-fail       { background: #7f1d1d; color: #fca5a5; }
+.chip-pass       { background: #14532d; color: #86efac; }
+.chip-kc         { background: #0f172a; color: #7dd3fc; border: 1px solid #0369a1; font-family: monospace; font-size: 10px; }
+.chip-mrq-probed { background: #14532d; color: #86efac; }
+.chip-mrq-ignore { background: #7f1d1d; color: #fca5a5; }
+
+/* Observations */
+.obs-section {
+  padding: 6px 12px; border-bottom: 1px solid #1e293b; flex-shrink: 0;
+}
+.section-label {
+  font-size: 9px; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px;
+}
+.obs-list { display: flex; flex-wrap: wrap; gap: 4px; min-height: 20px; }
+.obs-chip {
+  font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 600;
+}
+
+/* Dialogue */
+.dialogue { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 9px; }
+.bubble { border-radius: 8px; padding: 9px 12px; font-size: 13px; line-height: 1.55; max-width: 100%; }
+.bubble-label { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+.bubble.tutor   { background: #1e3a5f; border-left: 3px solid #3b82f6; color: #bfdbfe; }
+.bubble.student { background: #1e293b; border-left: 3px solid #475569; color: #cbd5e1; }
+.bubble.empty   { color: #475569; font-size: 13px; font-style: italic; text-align: center; padding: 20px 0; }
+
+/* ── Timeline ── */
+.timeline {
+  background: #1e293b; border-top: 1px solid #334155;
+  padding: 9px 18px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.tl-label { font-size: 11px; color: #64748b; white-space: nowrap; }
+input[type=range] { flex: 1; accent-color: #3b82f6; cursor: pointer; }
+.tl-btn {
+  background: #334155; border: none; color: #94a3b8;
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px;
+}
+.tl-btn:hover { background: #475569; color: #e2e8f0; }
+.tl-info { font-size: 11px; color: #64748b; white-space: nowrap; min-width: 58px; text-align: right; }
+
+/* ── Overlay ── */
+#overlay {
+  position: fixed; inset: 0; background: #0f172a;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 14px; z-index: 100;
+}
+#overlay.hidden { display: none; }
+#overlay h2 { font-size: 16px; color: #94a3b8; font-weight: 500; }
+#overlay p  { font-size: 13px; color: #475569; max-width: 400px; text-align: center; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="hdr-label">Session Analysis</span>
+  <span class="article-title" id="article-title"></span>
+  <span class="validity-badge hidden" id="validity-badge"></span>
+  <span class="turn-indicator" id="turn-indicator">—</span>
+  <div class="metrics-bar" id="metrics-bar"></div>
+</header>
+
+<div class="main">
+  <!-- ── Graph panel ── -->
+  <div class="graph-wrap">
+    <div class="graph-caption">BKT knowledge state · frontier = ◇ amber · targeted = ◇ white</div>
+    <div id="kg-container">
+      <div class="graph-loading" id="graph-loading">Rendering graph…</div>
+    </div>
+  </div>
+
+  <!-- ── Side panel ── -->
+  <div class="side">
+    <div class="turn-header" id="turn-header"></div>
+
+    <div class="obs-section">
+      <div class="section-label">Preceding observations</div>
+      <div class="obs-list" id="obs-list"></div>
+    </div>
+
+    <div class="dialogue" id="dialogue"></div>
+  </div>
+</div>
+
+<div class="timeline">
+  <span class="tl-label">Turn</span>
+  <button class="tl-btn" id="btn-prev">&#8592;</button>
+  <input type="range" id="slider" min="0" max="0" value="0" step="1">
+  <button class="tl-btn" id="btn-next">&#8594;</button>
+  <span class="tl-info" id="tl-info">— / —</span>
+</div>
+
+<!-- ── Overlay (loading / error) ── -->
+<div id="overlay">
+  <h2 id="overlay-title">Loading…</h2>
+  <p id="overlay-msg">Fetching analysis data</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.25.0/dist/viz-global.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
+function slugify(name) {
+  return name.toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 64);
+}
+
+function wrapLabel(text, max = 15) {
+  const words = text.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const c = cur ? `${cur} ${w}` : w;
+    if (c.length <= max) { cur = c; } else { if (cur) lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  return lines.join('\\n');
+}
+
+function masteryColor(p) {
+  if (p <= 0.15) return '#1c2d45';
+  const stops = [
+    [0.15, [28,  45,  69]],
+    [0.40, [120, 80,   5]],
+    [0.70, [22,  101, 52]],
+    [1.00, [21,  128, 61]],
+  ];
+  for (let i = 1; i < stops.length; i++) {
+    const [t1, c1] = stops[i-1], [t2, c2] = stops[i];
+    if (p <= t2) {
+      const t = (p - t1) / (t2 - t1);
+      const r = Math.round(c1[0] + t*(c2[0]-c1[0]));
+      const g = Math.round(c1[1] + t*(c2[1]-c1[1]));
+      const b = Math.round(c1[2] + t*(c2[2]-c1[2]));
+      return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+    }
+  }
+  return '#15803d';
+}
+
+function pct(v) {
+  if (v === null || v === undefined) return 'N/A';
+  return Math.round(v * 100) + '%';
+}
+
+function scoreClass(v) {
+  if (v === null || v === undefined) return 'score-none';
+  if (v >= 0.8) return 'score-high';
+  if (v >= 0.6) return 'score-mid';
+  return 'score-low';
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Frontier computation
+// ─────────────────────────────────────────────────────────────────────────────
+
+function computeFrontier(bkt, concepts) {
+  // Build: conceptName → list of prerequisite conceptNames
+  const prereqsOf = {};
+  for (const c of concepts) {
+    for (const downstream of (c.prerequisite_for || [])) {
+      if (!prereqsOf[downstream]) prereqsOf[downstream] = [];
+      prereqsOf[downstream].push(c.concept);
+    }
+  }
+  const frontier = [];
+  for (const c of concepts) {
+    const id = slugify(c.concept);
+    if ((bkt[id] ?? 0) >= 0.7) continue;  // already mastered
+    const prereqs = prereqsOf[c.concept] || [];
+    if (prereqs.every(p => (bkt[slugify(p)] ?? 0) >= 0.7)) frontier.push(id);
+  }
+  return frontier;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KC graph (viz.js + svg-pan-zoom)
+// ─────────────────────────────────────────────────────────────────────────────
+
+let VIZ = null;
+let _panZoom = null;
+
+function buildDot(concepts, bkt, targetedKcId, frontier) {
+  const nameSet = new Set(concepts.map(c => c.concept));
+  const lines = [
+    'digraph G {',
+    '  rankdir=TB;',
+    '  bgcolor="transparent";',
+    '  graph [pad="0.4", nodesep="0.5", ranksep="0.7"];',
+    '  node [shape=ellipse, style=filled, fontcolor="#e2e8f0",',
+    '        fontname="Helvetica", fontsize=10, margin="0.15,0.10", penwidth=2.0];',
+    '  edge [color="#475569", arrowsize=0.7, penwidth=1.2];',
+    '',
+  ];
+  for (const c of concepts) {
+    const id = slugify(c.concept);
+    const p  = bkt[id] ?? 0;
+    const fill = masteryColor(p);
+    const label = wrapLabel(c.concept.replace(/"/g, "'"));
+    const isTargeted = id === targetedKcId;
+    const isFrontier = frontier.includes(id) && !isTargeted;
+    const isMastered = p >= 0.7;
+    const borderColor = isTargeted  ? '#ffffff'
+                      : isFrontier  ? '#f59e0b'
+                      : isMastered  ? '#22c55e'
+                      : '#475569';
+    const pen = isTargeted ? 3.5 : isFrontier ? 2.5 : isMastered ? 2.0 : 1.5;
+    lines.push(`  "${id}" [label="${label}", fillcolor="${fill}", color="${borderColor}", penwidth=${pen}];`);
+  }
+  lines.push('');
+  for (const c of concepts) {
+    const src = slugify(c.concept);
+    for (const tgt of (c.prerequisite_for || [])) {
+      if (!nameSet.has(tgt)) continue;
+      lines.push(`  "${src}" -> "${slugify(tgt)}";`);
+    }
+  }
+  lines.push('}');
+  return lines.join('\n');
+}
+
+function renderGraph(bkt, targetedKcId, frontier, concepts) {
+  const container = document.getElementById('kg-container');
+  const loading   = document.getElementById('graph-loading');
+  if (!VIZ || !concepts.length) { if (loading) loading.style.display = 'flex'; return; }
+  if (_panZoom) { try { _panZoom.destroy(); } catch (_) {} _panZoom = null; }
+  if (loading) loading.style.display = 'none';
+  const dot = buildDot(concepts, bkt, targetedKcId, frontier);
+  try {
+    const svgEl = VIZ.renderSVGElement(dot);
+    svgEl.setAttribute('width', '100%');
+    svgEl.setAttribute('height', '100%');
+    svgEl.style.cssText = 'display:block;';
+    // Remove old SVG but keep loading indicator
+    for (const child of [...container.children]) {
+      if (!child.classList.contains('graph-loading')) child.remove();
+    }
+    container.appendChild(svgEl);
+    _panZoom = svgPanZoom(svgEl, {
+      zoomEnabled: true, panEnabled: true, controlIconsEnabled: false,
+      fit: true, center: true, minZoom: 0.2, maxZoom: 8, zoomScaleSensitivity: 0.3,
+    });
+  } catch (e) {
+    console.error('[analysis] viz.js error:', e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chip helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const OBS_META = {
+  strong_articulation: { label: 'Strong articulation',    bg: '#14532d', fg: '#86efac' },
+  weak_articulation:   { label: 'Emerging understanding', bg: '#713f12', fg: '#fde68a' },
+  guided_recognition:  { label: 'Guided recognition',     bg: '#7c2d12', fg: '#fdba74' },
+  misconception:       { label: 'Misconception',          bg: '#7f1d1d', fg: '#fca5a5' },
+  absent:              { label: 'Not engaged',            bg: '#1e293b', fg: '#94a3b8' },
+  contradiction:       { label: 'Contradiction',          bg: '#581c87', fg: '#d8b4fe' },
+};
+
+function chip(text, cssClass) {
+  const s = document.createElement('span');
+  s.className = `chip ${cssClass}`;
+  s.textContent = text;
+  return s;
+}
+
+function nacChip(verdict) {
+  if (!verdict) return null;
+  if (verdict === 'disabled') return chip('NAC disabled', 'chip-disabled');
+  return chip(verdict === 'compliant' ? '✓ Compliant' : '✗ Violation',
+              verdict === 'compliant' ? 'chip-compliant' : 'chip-violation');
+}
+
+function kcStatusChip(status) {
+  if (!status) return null;
+  const map = {
+    on_frontier:     ['On frontier',     'chip-frontier'],
+    mastered:        ['Mastered',        'chip-mastered'],
+    prereqs_not_met: ['Prereqs not met', 'chip-prereqs'],
+    off_map:         ['Off map',         'chip-offmap'],
+  };
+  const [label, cls] = map[status] || [status, 'chip-disabled'];
+  return chip(label, cls);
+}
+
+function lcqChip(observed, warranted) {
+  if (!observed && !warranted) return null;
+  const match = observed === warranted;
+  return chip(
+    match ? `LCQ ✓ ${observed || '?'}` : `LCQ ${observed || '?'} ≠ ${warranted || '?'}`,
+    match ? 'chip-match' : 'chip-mismatch'
+  );
+}
+
+function stallChip(frame) {
+  if (!frame.is_stall_turn) return null;
+  const label = frame.stall_shape === 'shape1' ? 'Stall (mastered KC)'
+              : frame.stall_shape === 'shape2' ? 'Stall (no progress)'
+              : 'Stall';
+  return chip(label, 'chip-stall');
+}
+
+function reviewerChip(verdict) {
+  if (!verdict || verdict === 'disabled') return null;
+  const map = {
+    pass: ['Reviewer ✓', 'chip-pass'],
+    warn: ['Reviewer ⚠', 'chip-warn'],
+    fail: ['Reviewer ✗', 'chip-fail'],
+  };
+  const [label, cls] = map[verdict] || ['Reviewer ?', 'chip-disabled'];
+  return chip(label, cls);
+}
+
+function appendChip(container, el) {
+  if (el) container.appendChild(el);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Frame renderer
+// ─────────────────────────────────────────────────────────────────────────────
+
+let DATA      = null;
+let FRAME_IDX = 0;
+
+function renderMetrics(metrics) {
+  const bar = document.getElementById('metrics-bar');
+  bar.innerHTML = '';
+  const defs = [
+    { key: 'nac',       label: 'NAC',   tip: 'Non-Answer Compliance' },
+    { key: 'kft',       label: 'KFT',   tip: 'Knowledge Frontier Targeting' },
+    { key: 'pr',        label: 'PR',    tip: 'Progression Rate' },
+    { key: 'lcq',       label: 'LCQ',   tip: 'Lesson Calibration Quality' },
+    { key: 'mrq',       label: 'MRQ',   tip: 'Misconception Response Quality (N/A = none detected)' },
+    { key: 'composite', label: 'Score', tip: 'Composite: NAC × (0.5·KFT + 0.25·PR + 0.25·LCQ + MRQ_adj)' },
+  ];
+  for (const d of defs) {
+    const v = metrics[d.key];
+    const el = document.createElement('div');
+    el.className = 'metric-chip';
+    el.title = d.tip;
+    el.innerHTML = `<span class="metric-label">${d.label}</span>`
+                 + `<span class="metric-value ${scoreClass(v)}">${pct(v)}</span>`;
+    bar.appendChild(el);
+  }
+}
+
+function renderFrame(idx) {
+  if (!DATA || !VIZ) return;
+  FRAME_IDX = idx;
+  const frame    = DATA.frames[idx];
+  const concepts = DATA.domain_map?.core_concepts || [];
+
+  // Header indicators
+  document.getElementById('turn-indicator').textContent = `T${frame.turn_number}`;
+  document.getElementById('slider').value = idx;
+  document.getElementById('tl-info').textContent = `${idx + 1} / ${DATA.frames.length}`;
+
+  // Frontier from BKT snapshot for this turn
+  const frontier = computeFrontier(frame.bkt_snapshot || {}, concepts);
+
+  // Graph
+  renderGraph(frame.bkt_snapshot || {}, frame.targeted_kc_id, frontier, concepts);
+
+  // ── Turn header chips ────────────────────────────────────────────────────
+  const header = document.getElementById('turn-header');
+  header.innerHTML = '';
+
+  const tbadge = document.createElement('span');
+  tbadge.className = 't-badge';
+  tbadge.textContent = `Turn ${frame.turn_number}`;
+  header.appendChild(tbadge);
+
+  // KC name chip
+  if (frame.targeted_kc_id) {
+    const kcName = concepts.find(c => slugify(c.concept) === frame.targeted_kc_id)?.concept
+                   || frame.targeted_kc_id;
+    header.appendChild(chip(kcName, 'chip-kc'));
+  }
+
+  appendChip(header, nacChip(frame.nac_verdict));
+  appendChip(header, kcStatusChip(frame.kc_status));
+  appendChip(header, lcqChip(frame.observed_type, frame.warranted_type));
+  appendChip(header, stallChip(frame));
+  appendChip(header, reviewerChip(frame.reviewer_verdict));
+
+  if (frame.mrq_verdict === 'probed') {
+    header.appendChild(chip('Misconception probed ✓', 'chip-mrq-probed'));
+  } else if (frame.mrq_verdict === 'ignored') {
+    header.appendChild(chip('Misconception ignored ✗', 'chip-mrq-ignore'));
+  }
+
+  // ── Preceding observations ───────────────────────────────────────────────
+  const obsList = document.getElementById('obs-list');
+  obsList.innerHTML = '';
+  for (const obs of (frame.preceding_observations || [])) {
+    const meta = OBS_META[obs.observation_class] || OBS_META.absent;
+    const c = document.createElement('span');
+    c.className = 'obs-chip';
+    c.style.cssText = `background:${meta.bg};color:${meta.fg}`;
+    const kcName = concepts.find(x => slugify(x.concept) === obs.kc_id)?.concept || obs.kc_id;
+    c.textContent = `${meta.label}: ${kcName}`;
+    if (obs.evidence_quote) c.title = obs.evidence_quote;
+    obsList.appendChild(c);
+  }
+
+  // ── Dialogue ─────────────────────────────────────────────────────────────
+  const dialogue = document.getElementById('dialogue');
+  dialogue.innerHTML = '';
+
+  if (frame.student_message) {
+    const b = document.createElement('div');
+    b.className = 'bubble student';
+    b.innerHTML = `<div class="bubble-label">Student</div>${escHtml(frame.student_message)}`;
+    dialogue.appendChild(b);
+  }
+
+  if (frame.tutor_response) {
+    const b = document.createElement('div');
+    b.className = 'bubble tutor';
+    b.innerHTML = `<div class="bubble-label">Tutor</div>${escHtml(frame.tutor_response)}`;
+    dialogue.appendChild(b);
+  }
+
+  if (!frame.student_message && !frame.tutor_response) {
+    const b = document.createElement('div');
+    b.className = 'bubble empty';
+    b.textContent = 'No dialogue data for this turn.';
+    dialogue.appendChild(b);
+  }
+
+  dialogue.scrollTop = 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data loading
+// ─────────────────────────────────────────────────────────────────────────────
+
+function showOverlay(title, msg) {
+  document.getElementById('overlay-title').textContent = title;
+  document.getElementById('overlay-msg').textContent   = msg;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+function hideOverlay() {
+  document.getElementById('overlay').classList.add('hidden');
+}
+
+async function loadData() {
+  const params    = new URLSearchParams(window.location.search);
+  const sessionId = params.get('session_id');
+
+  if (!sessionId) {
+    showOverlay('Missing session_id', 'Add ?session_id=… to the URL.');
+    return;
+  }
+
+  const token = localStorage.getItem('socratic_token');
+  if (!token) {
+    showOverlay('Not authenticated', 'Sign in at the main app (/), then return to this page.');
+    return;
+  }
+
+  showOverlay('Loading…', 'Fetching analysis data');
+
+  let resp;
+  try {
+    resp = await fetch(`/api/admin/sessions/${sessionId}/analysis-view`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (e) {
+    showOverlay('Network error', e.message);
+    return;
+  }
+
+  if (resp.status === 401 || resp.status === 403) {
+    showOverlay('Access denied', 'Superuser access is required to view analysis.');
+    return;
+  }
+  if (resp.status === 404) {
+    showOverlay('Not found', `Session "${sessionId}" was not found.`);
+    return;
+  }
+  if (resp.status === 409) {
+    const body = await resp.json().catch(() => ({}));
+    showOverlay('Analysis not ready', body.detail || 'Trigger analysis first via POST /api/export/sessions/{id}/analyze.');
+    return;
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    showOverlay('Error', body.detail || `HTTP ${resp.status}`);
+    return;
+  }
+
+  DATA = await resp.json();
+
+  // Populate static header fields
+  document.getElementById('article-title').textContent = DATA.article_title || '';
+  document.title = `Analysis — ${DATA.article_title || sessionId}`;
+
+  const badge = document.getElementById('validity-badge');
+  badge.classList.remove('hidden');
+  if (DATA.metrics.is_valid === false) {
+    badge.textContent = `Invalid — ${DATA.metrics.invalidity_reason || 'too few turns'}`;
+    badge.className   = 'validity-badge validity-invalid';
+  } else {
+    badge.textContent = 'Valid';
+    badge.className   = 'validity-badge validity-valid';
+  }
+
+  renderMetrics(DATA.metrics);
+
+  // Initialise viz.js (loads WASM)
+  VIZ = await Viz.instance();
+
+  if (DATA.frames.length === 0) {
+    showOverlay('No data', 'The analysis contains no tutor turns.');
+    return;
+  }
+
+  // Slider
+  const slider = document.getElementById('slider');
+  slider.min   = 0;
+  slider.max   = DATA.frames.length - 1;
+  slider.value = 0;
+  slider.addEventListener('input', () => renderFrame(parseInt(slider.value)));
+
+  document.getElementById('btn-prev').addEventListener('click', () => {
+    if (FRAME_IDX > 0) renderFrame(FRAME_IDX - 1);
+  });
+  document.getElementById('btn-next').addEventListener('click', () => {
+    if (FRAME_IDX < DATA.frames.length - 1) renderFrame(FRAME_IDX + 1);
+  });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'ArrowLeft'  && FRAME_IDX > 0)                      renderFrame(FRAME_IDX - 1);
+    if (e.key === 'ArrowRight' && FRAME_IDX < DATA.frames.length - 1) renderFrame(FRAME_IDX + 1);
+  });
+
+  hideOverlay();
+  renderFrame(0);
+}
+
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+</body>
+</html>

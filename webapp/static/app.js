@@ -402,6 +402,7 @@ const App = (() => {
   async function _endSession() {
     document.getElementById("btn-end-session").classList.add("hidden");
     Chat.lockInput();
+    const endedSessionId = AppState.sessionId;
     try {
       await apiFetch(`/api/sessions/${AppState.sessionId}/end`, { method: "POST" });
     } catch { /* best-effort */ }
@@ -411,6 +412,12 @@ const App = (() => {
       `You completed ${AppState.turnCount} turn${AppState.turnCount !== 1 ? "s" : ""} on "${AppState.articleTitle}".`;
 
     document.getElementById("btn-new-article").addEventListener("click", _resetForNewArticle);
+
+    const viewLink = document.getElementById("btn-view-analysis");
+    if (AppState.isSuperuser && endedSessionId) {
+      viewLink.href = `/static/analysis.html?session_id=${endedSessionId}`;
+      viewLink.classList.remove("hidden");
+    }
   }
 
   function _resetForNewArticle() {
@@ -422,6 +429,7 @@ const App = (() => {
     AppState.turnCount      = 0;
 
     document.getElementById("btn-end-session").classList.add("hidden");
+    document.getElementById("btn-view-analysis").classList.add("hidden");
 
     // Remove old turn handler to avoid duplicate listeners
     const form = document.getElementById("form-chat");

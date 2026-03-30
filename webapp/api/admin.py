@@ -17,6 +17,7 @@ GET  /api/admin/users/{user_id}/sessions             — list all sessions for a
 GET  /api/admin/sessions/{session_id}/transcript     — full transcript (stripped)
 GET  /api/admin/sessions/{session_id}/guardrail-review — transcript with NAC metadata
 GET  /api/admin/sessions/{session_id}/analysis-input — everything needed for analyze_transcript()
+GET  /api/admin/sessions/{session_id}/analysis-view  — merged analysis + dialogue for viewer
 """
 
 from __future__ import annotations
@@ -364,4 +365,93 @@ async def get_analysis_input(
         "bkt_initial_states": bkt_initial_states,
         "assessment_turns": assessment_turns,
         "lesson_turns": lesson_turns,
+    }
+
+
+@router.get("/sessions/{session_id}/analysis-view")
+async def get_analysis_view(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return merged analysis + dialogue data for the analysis viewer.
+
+    Combines sessions.analysis (EvaluationResult) with Turn dialogue text from
+    the DB.  One frame per TurnResult (tutor turns only), in session order.
+
+    - 404 if session not found
+    - 409 if analysis is not ready (status != "ready" or null)
+    - 200 {session_id, article_title, domain_map, metrics, frames}
+    """
+    _require_superuser(current_user)
+
+    result = await db.execute(
+        select(Session, Article)
+        .join(Article, Session.article_id == Article.id)
+        .where(Session.id == session_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session, article = row
+
+    if session.analysis is None or session.analysis_status != "ready":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Analysis not ready (status: {session.analysis_status or 'none'})",
+        )
+
+    analysis = session.analysis  # dict from EvaluationResult.to_dict()
+
+    turns_result = await db.execute(
+        select(Turn)
+        .where(Turn.session_id == session_id)
+        .order_by(Turn.turn_number)
+    )
+    all_turns = turns_result.scalars().all()
+    turns_by_number = {t.turn_number: t for t in all_turns}
+
+    frames = []
+    for tr in analysis.get("turn_results", []):
+        tn = tr.get("turn_number")
+        tutor_turn = turns_by_number.get(tn)
+
+        # Find the last user turn before this tutor turn
+        student_message = None
+        for t in reversed(all_turns):
+            if t.turn_number < tn and t.role == "user":
+                student_message = t.content
+                break
+
+        frames.append({
+            "turn_number":            tn,
+            "targeted_kc_id":         tr.get("targeted_kc_id"),
+            "kc_status":              tr.get("kc_status"),
+            "nac_verdict":            tr.get("nac_verdict"),
+            "reviewer_verdict":       tr.get("reviewer_verdict"),
+            "observed_type":          tr.get("observed_type"),
+            "warranted_type":         tr.get("warranted_type"),
+            "mrq_verdict":            tr.get("mrq_verdict"),
+            "bkt_snapshot":           tr.get("bkt_snapshot", {}),
+            "preceding_observations": tr.get("preceding_observations", []),
+            "is_stall_turn":          tr.get("is_stall_turn", False),
+            "stall_shape":            tr.get("stall_shape"),
+            "student_message":        student_message,
+            "tutor_response":         tutor_turn.content if tutor_turn else None,
+        })
+
+    metrics_keys = [
+        "nac", "kft", "pr", "lcq", "mrq", "mrq_adjustment", "composite",
+        "total_tutor_turns", "is_valid", "invalidity_reason",
+        "reviewer_active", "reviewer_rewrite_count",
+    ]
+    metrics = {k: analysis.get(k) for k in metrics_keys}
+
+    return {
+        "session_id":    session_id,
+        "article_title": article.canonical_title,
+        "domain_map":    article.domain_map,
+        "metrics":       metrics,
+        "frames":        frames,
     }

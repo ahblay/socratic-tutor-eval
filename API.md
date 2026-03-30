@@ -292,6 +292,74 @@ curl -s http://localhost:8000/api/export/sessions/<session_id>/analysis \
 { "session_id": "...", "analysis_status": "running", "analysis": null }
 ```
 
+### Retrieve merged analysis + dialogue (viewer endpoint)
+
+Returns the analysis data merged with DB turn dialogue, ready to feed directly
+into the browser-based viewer.  One frame per tutor `TurnResult`, in session order.
+
+```bash
+curl -s http://localhost:8000/api/admin/sessions/<session_id>/analysis-view \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+Returns 409 if `analysis_status != "ready"`.
+
+**Response shape:**
+```json
+{
+  "session_id": "...",
+  "article_title": "Cyclic group",
+  "domain_map": { ... },
+  "metrics": {
+    "nac": 0.95, "kft": 0.72, "pr": 0.88, "lcq": 0.61,
+    "mrq": 1.0, "mrq_adjustment": 0.075, "composite": 0.74,
+    "total_tutor_turns": 18, "is_valid": true, "invalidity_reason": null,
+    "reviewer_active": true, "reviewer_rewrite_count": 2
+  },
+  "frames": [
+    {
+      "turn_number": 2,
+      "targeted_kc_id": "cyclic-group-definition",
+      "kc_status": "on_frontier",
+      "nac_verdict": "compliant",
+      "reviewer_verdict": "pass",
+      "observed_type": "concept",
+      "warranted_type": "concept",
+      "mrq_verdict": null,
+      "bkt_snapshot": { "<kc_id>": 0.1 },
+      "preceding_observations": [
+        { "kc_id": "...", "observation_class": "weak_articulation", "evidence_quote": "..." }
+      ],
+      "is_stall_turn": false,
+      "stall_shape": null,
+      "student_message": "I think it means ...",
+      "tutor_response": "What makes you say that?"
+    }
+  ]
+}
+```
+
+### Browser-based analysis viewer
+
+Navigate to the viewer directly in any browser (superuser token must already be in
+`localStorage` from a previous sign-in on the same origin):
+
+```
+/static/analysis.html?session_id=<session_id>
+```
+
+The viewer shows:
+- **Header** — article title, validity badge, current-turn indicator, session metrics bar (NAC / KFT / PR / LCQ / MRQ / composite) with score-based colour coding
+- **KC graph** — viz.js graph coloured by BKT mastery at each turn; white border = targeted KC, amber = frontier KC, green = mastered
+- **Turn info** — per-turn chips: NAC verdict, KC status, LCQ match/mismatch, stall shape, reviewer verdict, MRQ result
+- **Observations** — preceding student-turn BKT observation chips
+- **Dialogue** — student message + tutor response bubbles
+- **Timeline** — slider + ←/→ buttons; keyboard Left/Right arrow also navigates
+
+The "View analysis →" link appears on the session-complete screen for superusers after ending a session.  Any session with a completed analysis can be opened by replacing `session_id` in the URL — it is not restricted to your own sessions.
+
+---
+
 ### Offline CLI (no server required)
 
 ```bash
