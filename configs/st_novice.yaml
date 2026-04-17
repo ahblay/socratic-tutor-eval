@@ -1,0 +1,15 @@
+topic: "Extensive form games in game theory"
+
+tutor:
+  type: socratic
+  model: claude-sonnet-4-6
+
+student:
+  type: llm
+  preset: novice
+  base_model: haiku
+  misconception_count: 0
+
+max_turns: 20
+min_turns: 8
+verbose: true

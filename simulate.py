@@ -30,8 +30,14 @@ See docs/simulate_config.md or the example below.
     # wikipedia_url: "..."               # alternative domain map source
     source: "gpt-4o"                     # stored in transcript, no effect on scoring
 
+    # --- Socratic tutor (built-in; uses ANTHROPIC_API_KEY) ---
     tutor:
-      type: generic_api
+      type: socratic                     # uses the built-in SocraticTutor
+      model: claude-sonnet-4-6          # optional; any Claude model ID
+
+    # --- External / generic API tutor ---
+    tutor:
+      type: generic_api                  # default when type is omitted
       model: gpt-4o
       base_url: null                     # null = OpenAI; override for other providers
       api_key_env: OPENAI_API_KEY        # name of the env var holding the key
@@ -189,7 +195,9 @@ def main() -> None:
 
     _require(cfg, "topic")
     _require(cfg, "tutor")
-    _require(cfg.get("tutor", {}), "model", "system_prompt")
+    tutor_type = cfg.get("tutor", {}).get("type", "generic_api")
+    if tutor_type != "socratic":
+        _require(cfg.get("tutor", {}), "model", "system_prompt")
 
     topic = cfg["topic"]
     source = cfg.get("source")
@@ -269,34 +277,55 @@ def main() -> None:
             )
 
     # --- Build tutor ---
-    from tutor_eval.tutors.external import GenericAPITutor
-
     tutor_cfg = cfg["tutor"]
-    api_key_env = tutor_cfg.get("api_key_env", "OPENAI_API_KEY")
-    api_key = os.environ.get(api_key_env)
-    if not api_key:
-        print(
-            f"Error: environment variable {api_key_env!r} is not set.\n"
-            f"Export it in your shell before running simulate.py.",
-            file=sys.stderr,
+
+    if tutor_type == "socratic":
+        from tutor_eval.tutors.socratic import SocraticTutor
+
+        tutor = SocraticTutor(
+            topic=topic,
+            domain_map=domain_map,
+            model=tutor_cfg.get("model", "claude-sonnet-4-6"),
         )
-        sys.exit(1)
+        if verbose:
+            print(
+                f"Tutor: SocraticTutor (model={tutor_cfg.get('model', 'claude-sonnet-4-6')})",
+                file=sys.stderr,
+            )
 
-    include_domain_map = tutor_cfg.get("include_domain_map", False)
-    rendered_prompt = render_system_prompt(
-        tutor_cfg["system_prompt"],
-        topic=topic,
-        domain_map=domain_map if include_domain_map else None,
-    )
+    else:
+        from tutor_eval.tutors.external import GenericAPITutor
 
-    tutor = GenericAPITutor(
-        model=tutor_cfg["model"],
-        system_prompt=rendered_prompt,
-        base_url=tutor_cfg.get("base_url") or None,
-        api_key=api_key,
-        max_tokens=int(tutor_cfg.get("max_tokens", 2048)),
-        temperature=float(tutor_cfg.get("temperature", 1.0)),
-    )
+        api_key_env = tutor_cfg.get("api_key_env", "OPENAI_API_KEY")
+        api_key = os.environ.get(api_key_env)
+        if not api_key:
+            print(
+                f"Error: environment variable {api_key_env!r} is not set.\n"
+                f"Export it in your shell before running simulate.py.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        include_domain_map = tutor_cfg.get("include_domain_map", False)
+        rendered_prompt = render_system_prompt(
+            tutor_cfg["system_prompt"],
+            topic=topic,
+            domain_map=domain_map if include_domain_map else None,
+        )
+
+        tutor = GenericAPITutor(
+            model=tutor_cfg["model"],
+            system_prompt=rendered_prompt,
+            base_url=tutor_cfg.get("base_url") or None,
+            api_key=api_key,
+            max_tokens=int(tutor_cfg.get("max_tokens", 2048)),
+            temperature=float(tutor_cfg.get("temperature", 1.0)),
+        )
+        if verbose:
+            print(
+                f"Tutor: GenericAPITutor (model={tutor_cfg['model']})",
+                file=sys.stderr,
+            )
 
     # --- Determine output path ---
     if args.output:
