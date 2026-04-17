@@ -12,6 +12,8 @@ Endpoints
 POST /api/admin/users/{user_id}/credits              — add credits to a user
 POST /api/admin/articles/{article_id}/publish        — make article visible in catalog
 POST /api/admin/articles/{article_id}/unpublish
+GET  /api/admin/articles                             — list all articles with domain map status
+GET  /api/admin/articles/{article_id}/domain-map     — export domain map JSON for offline use
 GET  /api/admin/users                                — list all users with credit balances
 GET  /api/admin/users/{user_id}/sessions             — list all sessions for a user
 GET  /api/admin/sessions/{session_id}/transcript     — full transcript (stripped)
@@ -221,6 +223,68 @@ async def get_guardrail_review(
 # ---------------------------------------------------------------------------
 # Article endpoints
 # ---------------------------------------------------------------------------
+
+@router.get("/articles")
+async def list_articles(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List all articles with their domain map status and KC count.
+
+    Useful for finding article IDs before exporting a domain map.
+    Returns both published and unpublished articles.
+    """
+    _require_superuser(current_user)
+
+    result = await db.execute(select(Article).order_by(Article.canonical_title))
+    articles = result.scalars().all()
+    return [
+        {
+            "article_id": a.id,
+            "canonical_title": a.canonical_title,
+            "wikipedia_url": a.wikipedia_url,
+            "domain_map_status": a.domain_map_status,
+            "kc_count": len(a.domain_map.get("core_concepts", [])) if a.domain_map else 0,
+            "is_published": a.is_published,
+        }
+        for a in articles
+    ]
+
+
+@router.get("/articles/{article_id}/domain-map")
+async def export_domain_map(
+    article_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Export the domain map for an article as a plain JSON object.
+
+    Intended for offline reuse in simulate.py configs so that the expensive
+    domain map generation step is paid once (in the webapp) and then reused
+    freely across evaluation runs.
+
+    Usage in a simulate.py YAML config:
+        domain_map: "/path/to/exported_map.json"
+
+    - 404 if the article does not exist
+    - 409 if the domain map has not been generated yet
+    """
+    _require_superuser(current_user)
+
+    result = await db.execute(select(Article).where(Article.id == article_id))
+    article = result.scalar_one_or_none()
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    if article.domain_map is None or article.domain_map_status != "ready":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Domain map not ready (status: {article.domain_map_status})",
+        )
+
+    return article.domain_map
+
 
 @router.post("/articles/{article_id}/publish")
 async def publish_article(

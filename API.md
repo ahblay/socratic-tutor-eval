@@ -135,6 +135,57 @@ curl -s -X POST http://localhost:8000/api/admin/users/<user_id>/credits \
 
 ## Admin: Article Management
 
+### List all articles
+
+Returns every article (published and unpublished) with its domain map status and KC count. Use this to find an `article_id` before exporting its domain map.
+
+```bash
+curl -s http://localhost:8000/api/admin/articles \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+Example response entry:
+```json
+{
+  "article_id": "3f8a1c...",
+  "canonical_title": "Extensive-form game",
+  "wikipedia_url": "https://en.wikipedia.org/wiki/Extensive-form_game",
+  "domain_map_status": "ready",
+  "kc_count": 12,
+  "is_published": true
+}
+```
+
+### Export a domain map for offline reuse
+
+Downloads the domain map for an article as a JSON file. Use this to reuse a production-quality domain map in `simulate.py` without regenerating it (which costs ~2 Sonnet API calls per topic).
+
+```bash
+# Save to a local file
+curl -s http://localhost:8000/api/admin/articles/<article_id>/domain-map \
+  -H "Authorization: Bearer $TOKEN" > extensive_form_game.json
+```
+
+Then reference it in a `simulate.py` config:
+
+```yaml
+topic: "Extensive form games in game theory"
+domain_map: "./extensive_form_game.json"   # skips generation entirely
+
+tutor:
+  type: socratic
+  model: claude-sonnet-4-6
+
+student:
+  type: llm
+  preset: novice
+  base_model: haiku
+```
+
+This is the recommended workflow when running multiple evaluation sessions on the same topic — the domain map is paid for once in the webapp and reused freely across all runs.
+
+- `409` if the domain map has not been generated yet (`domain_map_status != "ready"`)
+
 ### Unpublish an article
 
 ```bash
