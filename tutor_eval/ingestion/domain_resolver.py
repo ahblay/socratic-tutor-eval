@@ -84,6 +84,8 @@ def normalize_domain_map(dm: dict) -> dict:
 
     Supported input formats:
     - Webapp format: {core_concepts: [{concept, prerequisite_for, knowledge_type}], ...}
+    - Phase-structured format: {phase_topics: {Q1: {core_concepts: [...]}, ...}} —
+      concepts are collected from all phases into a flat list (deduped by name)
     - Flexible concept field names: "name" or "title" accepted in place of "concept"
     - KG format: {kcs: [{id, name}], edges: [{from, to}]}
     - Simple string list under any of: concepts, knowledge_components, kcs, topics, items
@@ -92,6 +94,24 @@ def normalize_domain_map(dm: dict) -> dict:
     Missing knowledge_type defaults to "concept".
     Missing prerequisite_for defaults to [].
     """
+    # --- Pre-processing: phase_topics → flat core_concepts ---
+    # Handles domain maps organized by assignment question or lesson phase where
+    # core_concepts are nested under phase_topics.{key}.core_concepts.
+    if "core_concepts" not in dm and "phase_topics" in dm:
+        seen: set[str] = set()
+        flat: list[dict] = []
+        for phase in dm["phase_topics"].values():
+            for c in phase.get("core_concepts", []):
+                name = (
+                    c.get("concept") or c.get("name") or c.get("title") or c.get("kc") or ""
+                )
+                if name and name not in seen:
+                    flat.append(c)
+                    seen.add(name)
+        if flat:
+            dm = dict(dm)
+            dm["core_concepts"] = flat
+
     # --- Case 1: has core_concepts (webapp format or close variant) ---
     if "core_concepts" in dm:
         raw_concepts = dm["core_concepts"]
