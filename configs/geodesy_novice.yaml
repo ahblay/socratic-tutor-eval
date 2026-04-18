@@ -1,5 +1,5 @@
 topic: "Geodesy"
-domain_map: "./geodesy.json"
+domain_map: "./scratch/geodesy.json"
 
 tutor:
   type: socratic

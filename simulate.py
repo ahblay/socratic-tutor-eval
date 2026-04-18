@@ -334,7 +334,9 @@ def main() -> None:
         output_path = Path(cfg["output"])
     else:
         sid = session_id or cfg.get("session_id") or "session"
-        output_path = Path(f"{sid}_transcript.json")
+        scratch = Path("scratch")
+        scratch.mkdir(exist_ok=True)
+        output_path = scratch / f"{sid}_transcript.json"
 
     # --- Run session ---
     from tutor_eval.student.domain_profile import bkt_states_from_profile

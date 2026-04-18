@@ -14,9 +14,6 @@ conversation.jsonl
 .socratic-session.json
 .socratic-domain-cache/
 
-# Simulation output
-simulation/runs/
-
 # Runtime artifacts
 webapp.db
 *.db
