@@ -1,6 +1,6 @@
 # Project State — Socratic Tutor Evaluation Framework
 
-**Last updated:** 2026-04-17
+**Last updated:** 2026-04-18
 **Purpose:** Authoritative, self-contained reference for the current state of the project.
 Intended to give a new contributor (human or AI) enough context to begin productive work
 immediately. Where it conflicts with older docs, this document takes precedence.
@@ -70,6 +70,12 @@ webapp generates transcripts and can trigger scoring via a REST API.
 ├── score.py                       # CLI: analysis_input JSON → evaluation result
 ├── ingest.py                      # CLI: raw transcript → analysis_input (→ optional scoring)
 ├── simulate.py                    # CLI: YAML config → run session → transcript (→ optional scoring)
+│
+├── configs/                       # YAML session configs (named topic_preset.yaml)
+│   ├── geodesy_novice.yaml
+│   └── extensive_form_games_misconception.yaml
+│
+├── scratch/                       # gitignored — local artifacts (transcripts, results, domain maps)
 │
 ├── docs/
 │   ├── project_state.md           # THIS FILE — authoritative current state
@@ -330,7 +336,7 @@ opening_message: null              # null → "Hi, I'm trying to understand {top
 max_turns: 20
 min_turns: 8
 session_id: null                   # null → auto UUID
-output: null                       # null → {session_id}_transcript.json
+output: null                       # null → scratch/{session_id}_transcript.json
 verbose: true
 ```
 
@@ -390,7 +396,7 @@ profile, kg = generate_profile(
 
 | Preset | mastered | partial | absent |
 |---|---|---|---|
-| `novice` | Root KCs (no incoming edges) | — | All non-root KCs |
+| `novice` | — | Root KCs (no incoming edges) | All non-root KCs |
 | `partial_knowledge` | Root KCs + first half of sequence | Midpoint KC | Rest |
 | `expert` | All KCs | — | — |
 | `misconception_heavy` | Root KCs | First 2 non-root KCs | Rest |

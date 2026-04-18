@@ -28,23 +28,19 @@ Cost is a scaling concern: the current configuration (Sonnet for tutoring + Haik
 
 ```
 ├── tutor_eval/          # Evaluation library (simulation + post-hoc analysis)
-│   ├── tutors/          # Tutor implementations (AbstractTutor, SocraticTutor)
-│   ├── student/         # StudentAgent + BKT-initialized profiles
-│   ├── evaluation/      # BKTEvaluator, metrics
-│   └── simulation.py    # run_simulation() loop
+│   ├── tutors/          # Tutor implementations (AbstractTutor, SocraticTutor, GenericAPITutor)
+│   ├── student/         # StudentAgent + domain-map-based profiles
+│   ├── evaluation/      # BKTEvaluator, analyzer, metrics
+│   └── ingestion/       # Raw transcript ingestion pipeline
 ├── webapp/              # FastAPI web server
 │   ├── api/             # Route handlers (auth, articles, sessions, assessment, export)
 │   ├── db/              # SQLAlchemy models + async engine
 │   ├── services/        # Wikipedia fetcher, domain map cache
-│   ├── app.py           # FastAPI factory + lifespan
-│   └── config.py        # Env var configuration
-├── simulation/          # CLI entrypoint for offline simulations
-│   ├── run.py           # main() with --profile, --topic, --turns flags
-│   └── profiles/        # students.yaml (3 synthetic profiles)
-├── tests/               # 104 tests (pytest-asyncio)
-├── legacy/              # Old CLI files kept for reference
-├── tools/               # visualize.html, summary.html (JSONL viewers)
+│   └── static/          # Vanilla JS frontend
+├── configs/             # YAML session configs for simulate.py (named topic_preset.yaml)
+├── tests/               # pytest test suite
 ├── data/                # junyi_kg.json KC graph (38 nodes)
+├── scratch/             # gitignored — local artifacts (transcripts, results, domain maps)
 └── docs/                # This directory
 ```
 
@@ -59,8 +55,8 @@ pip install -e .
 # Set API key
 export ANTHROPIC_API_KEY=...
 
-# Run a simulation
-python simulation/run.py --profile tabula_rasa --turns 12
+# Run a simulation (transcript saved to scratch/)
+python simulate.py configs/geodesy_novice.yaml
 
 # Run tests
 pytest
