@@ -165,8 +165,8 @@ def generate_profile(
 
     # --- Apply preset ---
     if preset == "novice":
-        mastered = list(root_ids)
-        partial: list[str] = []
+        mastered: list[str] = []
+        partial: list[str] = list(root_ids)
         absent = non_root_ordered
 
     elif preset == "partial_knowledge":
