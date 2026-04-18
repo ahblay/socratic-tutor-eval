@@ -146,12 +146,12 @@ class TestMatchMisconceptionToKc:
 
 class TestGenerateProfile:
 
-    def test_novice_roots_mastered_rest_absent(self, linear_map):
+    def test_novice_roots_partial_rest_absent(self, linear_map):
         profile, _ = generate_profile(linear_map, preset="novice")
-        assert "foundations" in profile["mastered"]
+        assert "foundations" in profile["partial"]
         assert "core"        in profile["absent"]
         assert "advanced"    in profile["absent"]
-        assert profile["partial"] == []
+        assert profile["mastered"] == []
 
     def test_expert_all_kcs_mastered(self, linear_map):
         profile, kg = generate_profile(linear_map, preset="expert")
@@ -214,10 +214,10 @@ class TestGenerateProfile:
         for kc_id in profile["mastered"] + profile["partial"] + profile["absent"]:
             assert kc_id in kg_ids, f"KC {kc_id!r} in profile but not in KG"
 
-    def test_two_root_map_novice_both_roots_mastered(self, two_root_map):
+    def test_two_root_map_novice_both_roots_partial(self, two_root_map):
         profile, kg = generate_profile(two_root_map, preset="novice")
-        assert _derive_slug("Root A") in profile["mastered"]
-        assert _derive_slug("Root B") in profile["mastered"]
+        assert _derive_slug("Root A") in profile["partial"]
+        assert _derive_slug("Root B") in profile["partial"]
 
 
 # ===========================================================================
