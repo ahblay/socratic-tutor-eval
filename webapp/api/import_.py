@@ -33,7 +33,7 @@ def _require_superuser(user: User) -> None:
 def _synthetic_page_id(topic: str) -> int:
     digest = hashlib.sha256(topic.encode("utf-8")).digest()
     as_int = int.from_bytes(digest[:8], byteorder="big")
-    bounded = as_int % (10 ** 15)
+    bounded = as_int % (2 ** 31 - 1)  # keep within PostgreSQL INTEGER range
     return -bounded if bounded != 0 else -1
 
 
