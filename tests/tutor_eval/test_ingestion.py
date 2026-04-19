@@ -279,6 +279,16 @@ class TestPrepareAnalysisInput:
         out = prepare_analysis_input(raw, minimal_domain_map)
         assert out["bkt_initial_states"]["strategy"]["p_mastered"] == pytest.approx(0.77)
 
+    def test_teacher_role_normalized_to_tutor(self, minimal_domain_map):
+        raw = {
+            "topic": "Test",
+            "turns": [{"role": "teacher", "content": "What do you think?"}],
+        }
+        out = prepare_analysis_input(raw, minimal_domain_map)
+        roles = {t["role"] for t in out["lesson_turns"]}
+        assert "teacher" not in roles
+        assert "tutor" in roles
+
     def test_assessment_turns_always_empty_list(self, raw, minimal_domain_map):
         out = prepare_analysis_input(raw, minimal_domain_map)
         assert out["assessment_turns"] == []

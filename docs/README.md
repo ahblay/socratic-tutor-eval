@@ -7,6 +7,7 @@ This directory contains documentation for the Socratic Tutor Evaluation Framewor
 - **[overview.md](overview.md)** — Project goals, repository layout, quick start
 - **[architecture.md](architecture.md)** — System components, data flow, DB schema, session lifecycle
 - **[evaluation.md](evaluation.md)** — Metrics (NAC, KFT, MRQ, THQ, RS), BKT parameters, post-hoc analysis pipeline
+- **[convolearn.md](convolearn.md)** — ConvoLearn benchmark pipeline: how to run, all configuration flags, output formats, re-scoring an existing sample
 - **[implementation_plan.md](implementation_plan.md)** — Phase-by-phase plan, current status, pending work
 - **future_directions.md** — Local only (gitignored): ideas for future extensions
 

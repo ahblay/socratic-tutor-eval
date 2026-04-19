@@ -71,6 +71,14 @@ webapp generates transcripts and can trigger scoring via a REST API.
 ├── ingest.py                      # CLI: raw transcript → analysis_input (→ optional scoring)
 ├── simulate.py                    # CLI: YAML config → run session → transcript (→ optional scoring)
 │
+├── convolearn/                    # External benchmark evaluation pipeline
+│   ├── __init__.py
+│   ├── parse.py                   # Stage 1: HuggingFace dataset loading & sampling
+│   ├── domain_maps.py             # Stage 2: domain map generation per prompt
+│   ├── adapter.py                 # Stage 3: ConvoLearn dialogue → analysis_input
+│   ├── score_batch.py             # Stages 4+5: CLI entrypoint, parallel scoring, output
+│   └── results/                   # gitignored — output files
+│
 ├── configs/                       # YAML session configs (named topic_preset.yaml)
 │   ├── geodesy_novice.yaml
 │   └── extensive_form_games_misconception.yaml
@@ -81,6 +89,7 @@ webapp generates transcripts and can trigger scoring via a REST API.
 │   ├── project_state.md           # THIS FILE — authoritative current state
 │   ├── transcript_analysis.md     # Raw transcript format, ingest.py, score.py reference
 │   ├── evaluation_plan.md         # Metric design decisions (authoritative for metrics)
+│   ├── convolearn.md              # ConvoLearn pipeline: usage, config, output format
 │   └── …                          # Older docs (may be partially outdated)
 │
 ├── API.md                         # curl-based reference for all webapp admin workflows
@@ -297,6 +306,31 @@ Optional fields: `domain_map` (inline object or file path), `wikipedia_url`, `bk
 Domain map sources (priority order): inline `domain_map` → `wikipedia_url` → `topic` string.
 All generated domain maps are cached in `~/.socratic-domain-cache/`.
 
+### `convolearn/score_batch.py` — Score a ConvoLearn sample
+
+```bash
+python -m convolearn.score_batch \
+  --dataset masharma/convolearn \
+  --sample-size 7 \
+  --no-nac --no-lcq \
+  --workers 4 \
+  --output-dir convolearn/results/
+```
+
+Runs the full five-stage pipeline automatically:
+1. Downloads the HuggingFace dataset, groups by first Student utterance, filters and samples
+   qualifying prompts → `sampled_dialogues.json`
+2. Generates domain maps per prompt (cached in `~/.socratic-domain-cache/`) → `domain_maps.json`
+3. Adapts each dialogue to `analysis_input` format (in-memory)
+4. Scores all dialogues in parallel using `ThreadPoolExecutor` → `scored_results.json`
+5. Aggregates per-prompt means and ConvoLearn ratings → `summary.json`
+
+No separate batch-creation step is needed — Stage 1 downloads and samples the dataset
+automatically. See `docs/convolearn.md` for the full configuration reference, output formats,
+and instructions for re-scoring an existing sample without re-downloading.
+
+---
+
 ### `simulate.py` — Run a session with an external tutor
 
 ```bash
@@ -478,6 +512,8 @@ stored in the database. Two passes: `compute_domain_map()` (Sonnet) then `enrich
 - Webapp with full tutoring flow, JWT auth, credits, domain map graph
 - Webapp async post-hoc analysis endpoints (`export.py`)
 - Full documentation in `docs/transcript_analysis.md` and `docs/evaluation_plan.md`
+- ConvoLearn benchmark pipeline (`convolearn/`) — full five-stage pipeline, parallel scoring,
+  output to `scored_results.json` and `summary.json` for downstream correlation analysis
 
 ### Partially Complete / Experimental
 

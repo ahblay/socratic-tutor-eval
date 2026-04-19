@@ -90,6 +90,8 @@ def prepare_analysis_input(raw: dict, domain_map: dict) -> dict:
         role = t.get("role", "")
         if role == "student":
             role = "user"
+        elif role == "teacher":
+            role = "tutor"
         content = t.get("content", "")
         lesson_turns.append({
             "turn_number": i + 1,
