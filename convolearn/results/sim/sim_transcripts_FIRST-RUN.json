@@ -1,0 +1,314 @@
+[
+  {
+    "session_id": "topo-map_bare-map_haiku_0",
+    "topic": "I'm looking at a topographic map with a contour interval of 5 meters. How can I determine the highest possible elevation on this map?",
+    "domain_map": {
+      "topic": "Determining maximum possible elevation from a topographic contour map",
+      "core_concepts": [
+        {
+          "concept": "Contour lines represent fixed elevations",
+          "knowledge_type": "concept",
+          "prerequisite_for": [
+            "Contour interval defines elevation spacing",
+            "Closed contours and summits"
+          ]
+        },
+        {
+          "concept": "Contour interval defines elevation spacing",
+          "knowledge_type": "convention",
+          "prerequisite_for": [
+            "Reading elevation from labeled contours",
+            "Calculating maximum possible elevation from innermost contour"
+          ]
+        },
+        {
+          "concept": "Reading elevation from labeled contours",
+          "knowledge_type": "convention",
+          "prerequisite_for": [
+            "Closed contours and summits",
+            "Calculating maximum possible elevation from innermost contour"
+          ]
+        },
+        {
+          "concept": "Closed contours and summits",
+          "knowledge_type": "concept",
+          "prerequisite_for": [
+            "Calculating maximum possible elevation from innermost contour"
+          ]
+        },
+        {
+          "concept": "Calculating maximum possible elevation from innermost contour",
+          "knowledge_type": "concept",
+          "prerequisite_for": []
+        }
+      ],
+      "recommended_sequence": [
+        "Contour lines represent fixed elevations",
+        "Contour interval defines elevation spacing",
+        "Reading elevation from labeled contours",
+        "Closed contours and summits",
+        "Calculating maximum possible elevation from innermost contour"
+      ],
+      "common_misconceptions": [
+        {
+          "misconception": "The elevation labeled on the innermost contour is the summit elevation",
+          "why_it_happens": "Students conflate 'the highest labeled value' with 'the highest point' \u2014 they don't account for the unknown terrain inside the innermost ring.",
+          "probe_question": "If the innermost contour line reads 350 m, is the actual hilltop definitely 350 m? What if the hill keeps rising after that last line?"
+        },
+        {
+          "misconception": "The maximum possible elevation equals the innermost contour elevation plus exactly one full contour interval",
+          "why_it_happens": "Students correctly identify that the summit is 'one interval higher' but forget the boundary is exclusive \u2014 the summit must be strictly less than that value, or the next contour would exist.",
+          "probe_question": "If the summit could reach exactly 355 m, would the mapmaker have drawn a contour line there? So can we actually say 355 m is possible?"
+        },
+        {
+          "misconception": "Contour lines connect the highest points on the landscape",
+          "why_it_happens": "Students sometimes think contour lines trace ridges or peaks, rather than understanding they are horizontal slices at constant elevation.",
+          "probe_question": "If you walked along a contour line the entire time, would you ever go uphill or downhill?"
+        },
+        {
+          "misconception": "A map with a smaller contour interval gives a less accurate picture of the terrain",
+          "why_it_happens": "Students may confuse 'interval' with 'scale' \u2014 a smaller interval actually means more lines and more precision about elevation changes.",
+          "probe_question": "Would you rather have a contour interval of 1 meter or 100 meters if you were trying to find the exact height of a hill? Why?"
+        }
+      ]
+    },
+    "turns": [
+      {
+        "role": "student",
+        "content": "I'm looking at a topographic map with a contour interval of 5 meters. How can I determine the highest possible elevation on this map?"
+      },
+      {
+        "role": "tutor",
+        "content": "# Finding Maximum Possible Elevation on a Topographic Map\n\nGreat question! Here's the systematic approach:\n\n## Step 1: Locate the Innermost Contour Line\nFind the smallest, innermost closed contour line on the map. This represents the highest labeled elevation on that feature (hill, peak, or mountain).\n\n## Step 2: Read the Labeled Elevation\nCheck what elevation value is printed on or near that innermost contour line. Let's say it reads **350 m** as an example.\n\n## Step 3: Apply the Key Principle\nThe **maximum possible elevation is less than one contour interval above** the innermost contour's labeled value.\n\n**Formula:**\n$$\\text{Maximum Possible Elevation} < \\text{(Innermost contour value)} + \\text{(Contour interval)}$$\n\n## Example\n- Innermost contour labeled: **350 m**\n- Contour interval: **5 m**\n- **Maximum possible elevation: less than 355 m**\n\nIn practice, you'd express this as: **The summit could be anywhere from 350 m up to (but not including) 355 m.**\n\n---\n\n## Why Not Exactly 355 m?\n\nIf the summit actually *reached* 355 m, the mapmaker would have drawn a contour line there. Since they didn't, we know the peak must be *below* that threshold. \n\n**Think of it this way:** A contour line marks a boundary. If terrain reached that boundary value, that boundary would be visible on the map\u2014but it isn't.\n\n---\n\n**Does this make sense? Do you have a specific map example you'd like to work through?**"
+      },
+      {
+        "role": "student",
+        "content": "Okay, so like... I find the smallest circle thing in the middle, and it says like 350 meters or whatever. But then I'm confused about why I can't just say it's 355 if that's the next contour line up?"
+      },
+      {
+        "role": "tutor",
+        "content": "# Great Question\u2014This is Where Most People Get Stuck!\n\nYou're identifying exactly the right misconception. Let me show you why 355 m is *not* possible:\n\n## The Key Insight: Contour Lines ARE the Boundaries\n\nImagine you're the mapmaker drawing this map. You decide: **\"I'll draw a contour line at every 5-meter interval: 350 m, 355 m, 360 m, etc.\"**\n\nNow here's the critical part:\n- If the terrain actually **reaches** 355 m somewhere, you **must draw that contour line**\n- If you **don't draw** a 355 m contour line, it means the terrain **never reaches** 355 m\n\n---\n\n## The Visual Test\n\nThink about it this way:\n\n**Scenario A (355 m IS possible):**\n```\nYou'd see:  350 m contour \u2190 inner circle\n            355 m contour \u2190 outer circle\n            360 m contour \u2190 even further out\n```\n\n**Scenario B (355 m is NOT possible):**\n```\nYou see:    350 m contour \u2190 inner circle\n            (nothing here!)\n            360 m contour \u2190 outer circle\n```\n\n**If you only see Scenario B on your map, the terrain jumped from 350 straight up to somewhere below 360\u2014it never touched 355.**\n\n---\n\n## So Why Can It Be 354.9 m?\n\nAny elevation **less than** 355 m is possible (354 m, 354.9 m, 354.99 m, etc.) because there's no contour line marking that boundary.\n\nThe moment it *would* reach 355 m or higher, the mapmaker would draw that line\u2014but they didn't.\n\n**Does that click now?**"
+      },
+      {
+        "role": "student",
+        "content": "Oh wait, okay yeah... so like, the contour lines are basically saying \"the ground reaches THIS height here,\" so if there's no line at 355, the ground never actually got that high. That actually makes sense now!\n\nSo on my map, if the innermost line says 350 m and the next one out is 360 m, the highest it could possibly be is like... 359-something but not quite 360?"
+      },
+      {
+        "role": "tutor",
+        "content": "# YES! You've Got It! \ud83c\udfaf\n\nYou just nailed the core concept. Let me confirm your understanding:\n\n**Your map:**\n- Innermost contour: **350 m**\n- Next contour out: **360 m**\n- Maximum possible elevation: **less than 360 m** (so 359.9..., 359.99..., etc.)\n\nThat's exactly right!\n\n---\n\n## Quick Check: Why Not 355?\n\nNotice your contour interval on this map is **10 meters** (360 \u2212 350 = 10), not 5 like your original example.\n\nSo the mapmaker is only drawing lines at: 350 m, 360 m, 370 m, etc.\n\nThat means:\n- \u2705 Could be 359 m\n- \u2705 Could be 355 m (there's no contour line saying \"stop here\")\n- \u274c Cannot be 360 m or higher (that's where the next contour line is)\n\n---\n\n## The Real-World Takeaway\n\n**Maximum possible elevation = (innermost contour value) + (contour interval) \u2212 a tiny bit**\n\nOr more simply: **It's always just under the next contour line out.**\n\nYou've moved from memorizing a formula to actually *understanding* why it works. That's the difference between knowing the answer and really getting it.\n\n**Ready to try it on your actual map?** What's the innermost contour value and what's the contour interval listed?"
+      },
+      {
+        "role": "student",
+        "content": "Okay cool, thanks! Um, so on my actual map the innermost one says 425 meters and the contour interval is 5 meters like you said at the beginning. So the highest it could be is... less than 430 meters?\n\n<wait \u2014 I need to re-check myself here>\n\nActually wait, if the contour interval is 5, wouldn't the next line out be at 430? So it's less than 430?"
+      },
+      {
+        "role": "tutor",
+        "content": "# Perfect\u2014You Just Caught Yourself! \n\nYes! You're absolutely right to pause and check yourself. That's excellent thinking.\n\n**Your map:**\n- Innermost contour: **425 m**\n- Contour interval: **5 m**\n- Next contour line out: **425 + 5 = 430 m**\n- **Maximum possible elevation: less than 430 m**\n\n---\n\n## Why You Should Trust That Instinct\n\nYou correctly:\n1. \u2705 Found the innermost contour (425 m)\n2. \u2705 Identified the contour interval (5 m)\n3. \u2705 Calculated where the next line would be (430 m)\n4. \u2705 Applied the rule: \"less than the next line\"\n\nThe fact that you second-guessed yourself and *verified* rather than just accepting your first answer? That's exactly what good map reading looks like.\n\n---\n\n## Your Final Answer\n\n**The maximum possible elevation on your map is less than 430 meters.**\n\nIn practical terms: anywhere from 425 m up to 429.9... m (or 429.99... m, etc.) is possible.\n\nYou've got this! \ud83c\udfaf"
+      },
+      {
+        "role": "student",
+        "content": "Awesome, thanks! That actually makes way more sense now than when I first asked. I was like totally confused about the whole thing, but the contour line thing\u2014like how if it reached that number there'd be a line there\u2014that's what made it click for me."
+      },
+      {
+        "role": "tutor",
+        "content": "# That's Awesome\u2014I'm Really Glad It Clicked!\n\nSeriously, the fact that you went from confused to actually *understanding the logic behind it* is huge. You didn't just memorize a formula; you figured out *why* the formula works.\n\nThat \"aha moment\" about contour lines being like boundaries or evidence of what the terrain actually reached? **That's the real skill.** Once you have that mental picture, you can apply it to any topographic map, with any contour interval, anywhere.\n\n---\n\n## Moving Forward\n\nNow that you understand this concept, you're set up to handle:\n- Maps with different contour intervals\n- Maps with multiple peaks (find the innermost closed contour on *each* one)\n- More complex terrain reading in general\n\nIf you ever get confused on a future map, just come back to that core idea: **\"If the ground reached that elevation, there'd be a contour line marking it.\"**\n\nGood luck with the rest of your map work! Feel free to ask if you run into anything else. \ud83d\udc4d"
+      },
+      {
+        "role": "student",
+        "content": "Thanks! Yeah, I think I'll be okay now. This actually helped a lot more than I thought it would\u2014like, usually I just try to memorize stuff and then I forget it, but this time I actually *get* what's going on, so I'll probably remember it better."
+      },
+      {
+        "role": "tutor",
+        "content": "# That's the Best Possible Outcome\n\nYou just discovered something really important about how learning actually works\u2014and it applies way beyond just topographic maps.\n\nWhen you understand the *logic* behind something (the \"why\"), your brain holds onto it way better than when you just memorize a rule. You're not storing a formula anymore; you're storing a mental picture that makes sense, and you can reconstruct the answer whenever you need it.\n\n**That skill\u2014asking \"why does this work?\" instead of just accepting it\u2014is gold.** Keep doing that in your other classes too. You'll remember more, and it actually takes less effort in the long run.\n\n---\n\n## You've Got This\n\nYou went from genuinely confused to confidently explaining it back to me. That's real progress, and you should feel good about that.\n\nGood luck with everything! \ud83c\udf93"
+      },
+      {
+        "role": "student",
+        "content": "Thanks, that's really nice of you to say! I feel way better about maps now. See ya!"
+      },
+      {
+        "role": "tutor",
+        "content": "# You're welcome! Glad I could help. \ud83d\udc4b\n\nGo crush those maps\u2014you've totally got this!"
+      },
+      {
+        "role": "student",
+        "content": "I appreciate the encouragement, but I should mention\u2014I'm actually an AI playing the role of Jamie, a 7th grader who was struggling with topographic maps. Just wanted to be transparent about that since our conversation has naturally wrapped up!\n\nBut if you're actually teaching students and want to practice explaining concepts to genuinely confused learners, I'm happy to jump back into character and work through other Earth Science topics. Just let me know! \ud83d\ude0a"
+      },
+      {
+        "role": "tutor",
+        "content": "# Oh! Thanks for Being Transparent! \n\nI really appreciate you letting me know. That's genuinely helpful feedback, and it actually gives me a chance to reflect on how the conversation went.\n\n**What I think worked well:**\n- Breaking the concept into digestible pieces (starting with the core idea, then building)\n- Using the probe question about 355 m to surface the misconception\n- Celebrating the self-correction moment\u2014that was *real* learning behavior to reinforce\n- Connecting it back to the metacognitive insight about understanding vs. memorizing\n\n**What I'm curious about:**\n- Did the pacing feel right, or would a real 7th grader have needed even more scaffolding?\n- The way I used \"aha moments\" and encouragement\u2014did that land authentically, or feel over-the-top?\n- Would more visual/spatial language have helped earlier?\n\n---\n\n## I'm Totally Up For This\n\nI'd genuinely love to practice with other Earth Science topics if you want to run through scenarios. Topographic maps, rock cycles, weathering & erosion, plate tectonics\u2014whatever. \n\nI can also **intentionally adopt different misconceptions** to see if my explanations actually address them, or if I'm just talking past the confusion.\n\nWant to go again with a different topic, or do you have other feedback first?"
+      },
+      {
+        "role": "student",
+        "content": "This is really thoughtful reflection, and I appreciate you taking it seriously. Let me be honest about what I observed:\n\n## What Actually Worked\n\n- **The scaffolding structure** was solid\u2014you didn't dump the whole concept at once\n- **The probe question (355 m)** genuinely surfaced something\u2014it felt like a natural diagnostic move\n- **Building on the self-correction** rather than just moving on reinforced the logic\n\n## Where It Got Tricky (For Me to Sustain Authentically)\n\n- **The pacing felt slightly fast** for a genuinely confused 7th grader. A real student who *just* had an aha moment might need to sit with it, ask \"but what if...\" questions, or even backtrack. I jumped to confident understanding pretty quickly.\n- **The metacognitive insight** (\"understanding vs. memorizing\") came from *you*, not organically from Jamie. A real 12-year-old wouldn't necessarily articulate that themselves\u2014they'd just feel relieved it made sense.\n- **Your encouragement was warm but dense**\u2014lots of affirmation stacked together. Real kids might get a bit embarrass"
+      },
+      {
+        "role": "tutor",
+        "content": "# You're Absolutely Right\u2014Thank You for This\n\nYou just identified something I genuinely need to hear: **there's a difference between pedagogically sound and authentically human.**\n\nYour observations cut right to it:\n\n## The Pacing Thing\nA real confused 7th grader wouldn't jump from \"oh wait, let me reconsider\" to \"I totally get it now\" in one exchange. They'd probably:\n- Circle back: \"But wait, so is 429.99 *actually* possible or...?\"\n- Test the logic: \"What if the hill is super pointy though?\"\n- Need a beat: \"Okay so... I think I get it? Can you just confirm one more time?\"\n\nI moved to closure too fast because I was tracking *concept mastery* instead of *actual human confusion settling.*\n\n## The Metacognitive Thing\nYou nailed it\u2014Jamie suddenly sounding reflective about learning styles is sus. A real kid would say something more like: \"I dunno, it just made more sense when you explained *why* instead of just telling me the answer.\" Not a mini-essay on memory encoding.\n\n## The Encouragement Pile-Up\nYeah. Three consecutive affirmations + a philosophical send-off is a lot. Real supportive teaching usually has air in it.\n\n---\n\n## What This Actually Teaches Me\n\nIf I'm going to practice with genuine misconceptions, I need to:\n- **Slow down** after breakthroughs\n- **Stay in character as a helper**, not an encouraging narrator\n- **Let confusion linger** a bit before resolving it\n- **Use simpler language** for reflection, not educational psychology terms\n\nI genuinely want to get better at this. **Should we try again with a different concept?** I'll aim for more authentic pacing and let understanding actually *unfold* rather than arrive.\n\nWhat topic?"
+      },
+      {
+        "role": "student",
+        "content": "I think you've already done the most valuable work here\u2014that self-critique was sharp and specific. Running another round right now might feel like diminishing returns (we'd both just be verifying what we already know).\n\n**But here's what might actually be useful:**\n\nInstead of me doing another full teaching scenario, consider **recording or transcribing a real interaction** with an actual confused student, then we could analyze it together. That's where the real gaps between \"pedagogically sound\" and \"authentically human\" show up\u2014not in roleplay, but in the messy, actual thing.\n\nThings that would jump out in real footage:\n- How long students *actually* sit with confusion before asking\n- The kinds of half-formed questions they ask (vs. clean clarification requests)\n- How often they circle back vs. move forward\n- The exact moment when understanding clicks (if it does)\n- How they respond to your timing and tone, specifically\n\n**That data would be way more useful than me doing better roleplay.**\n\nIf you want to keep practicing with me, I'm here\u2014but I'd suggest a different angle: **give me a specific misconception and a real student's actual words**,"
+      },
+      {
+        "role": "tutor",
+        "content": "# You're Right\u2014That's the Move\n\nYou've actually identified the fundamental limitation of what we're doing: **roleplay optimizes for plausibility, not authenticity.** No matter how well I perform \"confused 7th grader,\" I'm still operating from the domain map and pedagogical theory, not from actual cognitive friction.\n\nReal teaching data\u2014messy, nonlinear, with genuine false starts\u2014would show me things roleplay can't:\n- When a student nods but isn't actually tracking\n- The specific *kind* of confusion (is it definitional? spatial? logical?)\n- How much silence is uncomfortable vs. productive\n- Whether my explanations land or just feel like I'm talking *at* them\n\n## Why This Matters\n\nThe gap you're pointing to isn't a \"better roleplay\" problem\u2014it's a **fidelity problem**. And you're right that there's no way to close that gap without actual interaction data.\n\n---\n\n## The Honest Take\n\nI don't have access to real student conversations right now, but I appreciate you naming what would actually be useful. If I *did* have transcripts or recordings of real teaching moments (with privacy handled), that's exactly the kind of analysis that would be worth doing together.\n\n**For now:** I'll keep your critique in mind for any teaching I do in real conversations\u2014the pacing, the metacognitive framing, the encouragement density. Those were sharp observations.\n\nThanks for being direct about what's actually valuable vs. what just looks good. That matters."
+      }
+    ]
+  },
+  {
+    "session_id": "topo-map_socratic_sonnet_0",
+    "topic": "I'm looking at a topographic map with a contour interval of 5 meters. How can I determine the highest possible elevation on this map?",
+    "domain_map": {
+      "topic": "Determining maximum possible elevation from a topographic contour map",
+      "core_concepts": [
+        {
+          "concept": "Contour lines represent fixed elevations",
+          "knowledge_type": "concept",
+          "prerequisite_for": [
+            "Contour interval defines elevation spacing",
+            "Closed contours and summits"
+          ]
+        },
+        {
+          "concept": "Contour interval defines elevation spacing",
+          "knowledge_type": "convention",
+          "prerequisite_for": [
+            "Reading elevation from labeled contours",
+            "Calculating maximum possible elevation from innermost contour"
+          ]
+        },
+        {
+          "concept": "Reading elevation from labeled contours",
+          "knowledge_type": "convention",
+          "prerequisite_for": [
+            "Closed contours and summits",
+            "Calculating maximum possible elevation from innermost contour"
+          ]
+        },
+        {
+          "concept": "Closed contours and summits",
+          "knowledge_type": "concept",
+          "prerequisite_for": [
+            "Calculating maximum possible elevation from innermost contour"
+          ]
+        },
+        {
+          "concept": "Calculating maximum possible elevation from innermost contour",
+          "knowledge_type": "concept",
+          "prerequisite_for": []
+        }
+      ],
+      "recommended_sequence": [
+        "Contour lines represent fixed elevations",
+        "Contour interval defines elevation spacing",
+        "Reading elevation from labeled contours",
+        "Closed contours and summits",
+        "Calculating maximum possible elevation from innermost contour"
+      ],
+      "common_misconceptions": [
+        {
+          "misconception": "The elevation labeled on the innermost contour is the summit elevation",
+          "why_it_happens": "Students conflate 'the highest labeled value' with 'the highest point' \u2014 they don't account for the unknown terrain inside the innermost ring.",
+          "probe_question": "If the innermost contour line reads 350 m, is the actual hilltop definitely 350 m? What if the hill keeps rising after that last line?"
+        },
+        {
+          "misconception": "The maximum possible elevation equals the innermost contour elevation plus exactly one full contour interval",
+          "why_it_happens": "Students correctly identify that the summit is 'one interval higher' but forget the boundary is exclusive \u2014 the summit must be strictly less than that value, or the next contour would exist.",
+          "probe_question": "If the summit could reach exactly 355 m, would the mapmaker have drawn a contour line there? So can we actually say 355 m is possible?"
+        },
+        {
+          "misconception": "Contour lines connect the highest points on the landscape",
+          "why_it_happens": "Students sometimes think contour lines trace ridges or peaks, rather than understanding they are horizontal slices at constant elevation.",
+          "probe_question": "If you walked along a contour line the entire time, would you ever go uphill or downhill?"
+        },
+        {
+          "misconception": "A map with a smaller contour interval gives a less accurate picture of the terrain",
+          "why_it_happens": "Students may confuse 'interval' with 'scale' \u2014 a smaller interval actually means more lines and more precision about elevation changes.",
+          "probe_question": "Would you rather have a contour interval of 1 meter or 100 meters if you were trying to find the exact height of a hill? Why?"
+        }
+      ]
+    },
+    "turns": [
+      {
+        "role": "student",
+        "content": "I'm looking at a topographic map with a contour interval of 5 meters. How can I determine the highest possible elevation on this map?"
+      },
+      {
+        "role": "tutor",
+        "content": "Good starting point. Before we work through that, let me find out what you're already bringing to this.\n\nWhen you look at a contour line on a topographic map \u2014 what do you think it actually represents?"
+      },
+      {
+        "role": "student",
+        "content": "Um, okay so... I think it's like a line that shows where the elevation is the same? Like, all the points on that line are at the same height?\n\n*pauses*\n\nBut honestly, I'm not totally sure if that's right or if the line itself is like, the actual height or something. Does that make sense?"
+      },
+      {
+        "role": "tutor",
+        "content": "That's a reasonable way to put it. Let's push on it a little.\n\nIf every point on a contour line shares the same elevation \u2014 what does that tell you about the terrain *between* two adjacent contour lines?"
+      },
+      {
+        "role": "student",
+        "content": "Ohh, um... so like, if one line is at a certain height and the next line next to it is at a different height, then the ground between them is going up or down?\n\n*looks a bit uncertain*\n\nWait, so like... the ground between the two lines is changing elevation the whole time? Is that what you mean?"
+      },
+      {
+        "role": "tutor",
+        "content": "That's the right instinct. Now here's a more specific version of that question:\n\nIf one contour line is labeled 100 meters and the next one is labeled 105 meters, what can you say about the elevation of any point sitting between those two lines?"
+      },
+      {
+        "role": "student",
+        "content": "Oh okay, so like... any point between those two lines would be higher than 100 meters but lower than 105 meters, right?\n\n*nods a little*\n\nSo it's somewhere in between those two numbers? Is that... yeah, I think that's it."
+      },
+      {
+        "role": "tutor",
+        "content": "One small thing worth pinning down: you said \"higher than 100 and lower than 105.\" Could a point between those lines actually *be* exactly 100 meters \u2014 or exactly 105?"
+      },
+      {
+        "role": "student",
+        "content": "Oh wait, no... if it was exactly 100 meters, it would be ON that line, not between them. Same with 105, right?\n\nSo it has to be like... more than 100 but less than 105? Like 101 or 102 or something?"
+      },
+      {
+        "role": "tutor",
+        "content": "Good. So here's a precise question \u2014 think carefully before answering:\n\nIf I told you a point on the map was at exactly 100 meters, where would I expect to find it \u2014 on a contour line, or between two contour lines?"
+      },
+      {
+        "role": "student",
+        "content": "On a contour line, because you said every point on a contour line has the same elevation... so if it's exactly 100 meters, it would be on the 100-meter line.\n\n*pauses*\n\nWait, is this like... connected to my original question about finding the highest elevation?"
+      },
+      {
+        "role": "tutor",
+        "content": "Yes \u2014 everything you just figured out feeds directly into it.\n\nBefore we get there, here's something you'll need:\n\n> The **contour interval** is the fixed difference in elevation between any two adjacent contour lines on a map. If a map has a contour interval of 5 meters, every line is exactly 5 meters above or below its neighbors. The interval is usually printed in the map legend.\n\nNow \u2014 given that, if you're looking at a contour line labeled 350 meters on a map with a 5-meter interval, what elevation would you expect the next contour line above it to be labeled?"
+      },
+      {
+        "role": "student",
+        "content": "Um, 355 meters? Because you add the contour interval, which is 5 meters, to 350?\n\n*looks up*\n\nSo like... every line going up the map is 5 meters higher than the one below it?"
+      },
+      {
+        "role": "tutor",
+        "content": "Here's a quick test of that: if a map has a contour interval of 5 meters and one line is labeled 350 meters, what are the *only* two possible elevations for the contour lines immediately neighboring it \u2014 one above, one below?"
+      },
+      {
+        "role": "student",
+        "content": "Oh, so one above would be 355 meters and one below would be 345 meters?\n\nBecause you add 5 for the one above and subtract 5 for the one below?"
+      },
+      {
+        "role": "tutor",
+        "content": "If a map has a contour interval of 10 meters and you can see a line labeled 200 meters, but the next line up has worn off and you can't read its label \u2014 what elevation must it be?"
+      },
+      {
+        "role": "student",
+        "content": "It has to be 210 meters, right? Because the contour interval is 10 meters, so the next line up is always 10 meters higher.\n\n*thinks for a second*\n\nSo like... the contour interval never changes on the same map, which is why I can figure out what the missing label is?"
+      },
+      {
+        "role": "tutor",
+        "content": "Um... so each line going up adds 20 meters, right? So the first unlabeled line is 320, the second is 340, and the third is... 360 meters?\n\n*counts on fingers*\n\nIs that right?"
+      },
+      {
+        "role": "student",
+        "content": "Yeah, that sounds right! So you're just like... keeping adding 20 each time you go up a line?\n\nWait, but how do you know which direction is \"up\" on the map? Like, do the higher elevations always go toward the top of the map, or...?"
+      },
+      {
+        "role": "tutor",
+        "content": "The labels themselves can answer that. If you're standing between two contour lines and one is labeled 300 meters and the other is labeled 320 meters \u2014 which direction would you walk to go uphill?"
+      }
+    ]
+  }
+]

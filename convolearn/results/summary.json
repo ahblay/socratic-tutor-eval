@@ -1,0 +1,54 @@
+[
+  {
+    "prompt_id": "only-about-50-of-solar-energy-directed-toward-earth-actually-reaches-the-surface",
+    "question_prompt": "Only about 50% of solar energy directed toward Earth actually reaches the surface. What happens to the rest of it?",
+    "n_dialogues": 31,
+    "mean_nac": 0.3844,
+    "mean_kft": 0.6788,
+    "mean_pr": 1.0,
+    "mean_lcq": 0.4804,
+    "mean_mrq": 0.25,
+    "mean_composite": 0.2763,
+    "mean_effectiveness_consensus": 3.7581,
+    "mean_completeness_consensus": 2.4355
+  },
+  {
+    "prompt_id": "how-could-the-movement-of-earth-s-continents-over-time-affect-climate-i-m-trying",
+    "question_prompt": "How could the movement of Earth's continents over time affect climate? I'm trying to understand paleoclimate.",
+    "n_dialogues": 33,
+    "mean_nac": 0.3864,
+    "mean_kft": 0.7027,
+    "mean_pr": 0.9799,
+    "mean_lcq": 0.5365,
+    "mean_mrq": 0.5,
+    "mean_composite": 0.2932,
+    "mean_effectiveness_consensus": 3.8939,
+    "mean_completeness_consensus": 2.5455
+  },
+  {
+    "prompt_id": "i-m-looking-at-a-topographic-map-with-a-contour-interval-of-5-meters-how-can-i-d",
+    "question_prompt": "I'm looking at a topographic map with a contour interval of 5 meters. How can I determine the highest possible elevation on this map?",
+    "n_dialogues": 33,
+    "mean_nac": 0.508,
+    "mean_kft": 0.692,
+    "mean_pr": 0.9939,
+    "mean_lcq": 0.6854,
+    "mean_mrq": 0.6,
+    "mean_composite": 0.3968,
+    "mean_effectiveness_consensus": 3.3636,
+    "mean_completeness_consensus": 2.2424
+  },
+  {
+    "prompt_id": "why-does-saturn-rotate-so-much-faster-than-earth-my-astronomy-homework-says-satu",
+    "question_prompt": "Why does Saturn rotate so much faster than Earth? My astronomy homework says Saturn's day is only about 10 Earth hours long.",
+    "n_dialogues": 56,
+    "mean_nac": 0.4618,
+    "mean_kft": 0.5956,
+    "mean_pr": 0.9986,
+    "mean_lcq": 0.5795,
+    "mean_mrq": 0.4516,
+    "mean_composite": 0.3368,
+    "mean_effectiveness_consensus": 3.2321,
+    "mean_completeness_consensus": 2.1786
+  }
+]

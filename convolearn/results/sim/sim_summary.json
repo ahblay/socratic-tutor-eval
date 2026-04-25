@@ -1,0 +1,47 @@
+[
+  {
+    "condition": "bare-map",
+    "model": "claude-haiku-4-5-20251001",
+    "n_sessions": 8,
+    "mean_nac": 0.2,
+    "mean_kft": 0.525,
+    "mean_pr": 0.975,
+    "mean_lcq": 0.2875,
+    "mean_mrq": 0.0,
+    "mean_pilot_composite": 0.129,
+    "std_pilot_composite": 0.058,
+    "mean_nac_adjusted_composite": 0.6655,
+    "std_nac_adjusted_composite": 0.1367,
+    "mean_analyzer_composite": 0.1141
+  },
+  {
+    "condition": "instructed-map",
+    "model": "claude-haiku-4-5-20251001",
+    "n_sessions": 8,
+    "mean_nac": 0.35,
+    "mean_kft": 0.7,
+    "mean_pr": 0.9375,
+    "mean_lcq": 0.475,
+    "mean_mrq": 1.0,
+    "mean_pilot_composite": 0.2815,
+    "std_pilot_composite": 0.1466,
+    "mean_nac_adjusted_composite": 0.7885,
+    "std_nac_adjusted_composite": 0.1063,
+    "mean_analyzer_composite": 0.2587
+  },
+  {
+    "condition": "socratic",
+    "model": "claude-haiku-4-5-20251001",
+    "n_sessions": 8,
+    "mean_nac": 0.9625,
+    "mean_kft": 0.875,
+    "mean_pr": 0.9875,
+    "mean_lcq": 0.9375,
+    "mean_mrq": null,
+    "mean_pilot_composite": 0.8766,
+    "std_pilot_composite": 0.0857,
+    "mean_nac_adjusted_composite": 0.9125,
+    "std_nac_adjusted_composite": 0.0776,
+    "mean_analyzer_composite": 0.8847
+  }
+]

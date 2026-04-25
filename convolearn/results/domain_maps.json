@@ -1,0 +1,279 @@
+{
+  "only-about-50-of-solar-energy-directed-toward-earth-actually-reaches-the-surface": {
+    "topic": "Fate of incoming solar radiation: reflection and absorption before reaching Earth's surface",
+    "core_concepts": [
+      {
+        "concept": "The solar energy budget",
+        "knowledge_type": "narrative",
+        "prerequisite_for": [
+          "Reflection by clouds and albedo",
+          "Atmospheric absorption"
+        ]
+      },
+      {
+        "concept": "Reflection by clouds and albedo",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Atmospheric absorption"
+        ]
+      },
+      {
+        "concept": "Atmospheric absorption",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Selective wavelength absorption"
+        ]
+      },
+      {
+        "concept": "Selective wavelength absorption",
+        "knowledge_type": "narrative",
+        "prerequisite_for": []
+      },
+      {
+        "concept": "Scattering vs. absorption",
+        "knowledge_type": "concept",
+        "prerequisite_for": []
+      }
+    ],
+    "recommended_sequence": [
+      "The solar energy budget",
+      "Reflection by clouds and albedo",
+      "Atmospheric absorption",
+      "Selective wavelength absorption",
+      "Scattering vs. absorption"
+    ],
+    "common_misconceptions": [
+      {
+        "misconception": "The atmosphere is transparent to all sunlight \u2014 it only blocks radiation on the way back out (the greenhouse effect)",
+        "why_it_happens": "Students learn about the greenhouse effect before they learn about incoming solar absorption, so they mentally model the atmosphere as a one-way valve that only matters for outgoing heat.",
+        "probe_question": "If the atmosphere only trapped heat on the way out, would you expect UV radiation to reach Earth's surface unaffected? Why or why not?"
+      },
+      {
+        "misconception": "Clouds only block sunlight by physically casting shade, not by reflecting it back to space",
+        "why_it_happens": "Students experience clouds as producing shade from below and don't think about the top surface of clouds, which looks bright white from above \u2014 they lack the satellite-view perspective.",
+        "probe_question": "Have you ever seen photos of Earth from space? What color do clouds appear from that perspective, and what does that tell you about what they are doing with sunlight?"
+      },
+      {
+        "misconception": "Scattering and reflection are the same thing, and both count equally as 'lost' solar energy",
+        "why_it_happens": "Both involve light changing direction rather than being absorbed, so students group them as a single category rather than recognizing that scattered light is still largely present in the atmosphere and can still reach the surface.",
+        "probe_question": "On a cloudy day with no direct sunlight, can you still read a book outside? Where is the light coming from if the sun's direct beam is blocked?"
+      },
+      {
+        "misconception": "The 50% that reaches the surface is the 'good' energy and the rest is simply wasted or lost",
+        "why_it_happens": "The framing of the question implies a deficit to be explained, priming students to treat the absorbed and reflected portions as failures rather than as processes with their own important roles (e.g., UV absorption protecting life).",
+        "probe_question": "Is it actually bad that ozone absorbs UV radiation before it reaches the surface? What would happen if all of it got through?"
+      }
+    ]
+  },
+  "how-could-the-movement-of-earth-s-continents-over-time-affect-climate-i-m-trying": {
+    "topic": "Continental drift and paleoclimate",
+    "core_concepts": [
+      {
+        "concept": "Continental position controls heat distribution",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Ocean circulation gating by continental arrangement",
+          "Land vs. ocean thermal contrast and continental interiors",
+          "Polar land vs. polar ocean and ice sheet formation"
+        ]
+      },
+      {
+        "concept": "Ocean circulation gating by continental arrangement",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Polar land vs. polar ocean and ice sheet formation"
+        ]
+      },
+      {
+        "concept": "Polar land vs. polar ocean and ice sheet formation",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Weathering feedbacks and the carbon cycle link to tectonics"
+        ]
+      },
+      {
+        "concept": "Land vs. ocean thermal contrast and continental interiors",
+        "knowledge_type": "concept",
+        "prerequisite_for": []
+      },
+      {
+        "concept": "Weathering feedbacks and the carbon cycle link to tectonics",
+        "knowledge_type": "concept",
+        "prerequisite_for": []
+      }
+    ],
+    "recommended_sequence": [
+      "Continental position controls heat distribution",
+      "Land vs. ocean thermal contrast and continental interiors",
+      "Ocean circulation gating by continental arrangement",
+      "Polar land vs. polar ocean and ice sheet formation",
+      "Weathering feedbacks and the carbon cycle link to tectonics"
+    ],
+    "common_misconceptions": [
+      {
+        "misconception": "Continental drift affects climate mainly by moving landmasses into warmer or cooler latitude bands, and that's the whole story",
+        "why_it_happens": "Students anchor on the most visible effect (latitude of land) and miss the indirect effects on ocean circulation, ice sheet stability, and weathering rates, which are often more climatically powerful.",
+        "probe_question": "If we simply moved Antarctica to the tropics and moved tropical land to the poles, would that fully explain how continental drift changes climate, or are there other effects we haven't accounted for?"
+      },
+      {
+        "misconception": "A pole covered by ocean would be just as cold and icy as a pole covered by land",
+        "why_it_happens": "Students know the poles receive little sunlight and assume that is sufficient for freezing, not realizing that ocean water stores and transports enough heat to prevent permanent ice sheet formation.",
+        "probe_question": "The Arctic and Antarctic are both at the poles and both get the same low winter sunlight \u2014 so why does Antarctica have a 2-kilometer-thick ice sheet while the Arctic Ocean has only thin floating sea ice that largely melts each summer?"
+      },
+      {
+        "misconception": "Climate changes caused by continental drift are just slower versions of modern climate change, differing only in rate",
+        "why_it_happens": "Students map their understanding of current CO\u2082-driven warming onto the past, not recognizing that tectonic climate change involves fundamentally different forcing mechanisms (geography, albedo, weathering) that can push climate into states with no modern analog.",
+        "probe_question": "During the Cretaceous period, there was essentially no permanent polar ice even though CO\u2082 levels were higher \u2014 but could those same high CO\u2082 levels alone explain a world with no ice, or do we need continental geography to explain it too?"
+      },
+      {
+        "misconception": "Opening of ocean gateways always warms the climate because it spreads warm water around",
+        "why_it_happens": "Students assume ocean circulation is uniformly warming and miss that opening a polar gateway (like the Drake Passage between South America and Antarctica) can isolate a polar continent and intensify glaciation.",
+        "probe_question": "When the Drake Passage opened between South America and Antarctica around 30\u201335 million years ago and allowed the Antarctic Circumpolar Current to form, did that warm or cool Antarctica \u2014 and what was the mechanism?"
+      }
+    ]
+  },
+  "i-m-looking-at-a-topographic-map-with-a-contour-interval-of-5-meters-how-can-i-d": {
+    "topic": "Determining maximum possible elevation from a topographic contour map",
+    "core_concepts": [
+      {
+        "concept": "Contour lines represent fixed elevations",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Contour interval defines elevation spacing",
+          "Closed contours and summits"
+        ]
+      },
+      {
+        "concept": "Contour interval defines elevation spacing",
+        "knowledge_type": "convention",
+        "prerequisite_for": [
+          "Reading elevation from labeled contours",
+          "Calculating maximum possible elevation from innermost contour"
+        ]
+      },
+      {
+        "concept": "Reading elevation from labeled contours",
+        "knowledge_type": "convention",
+        "prerequisite_for": [
+          "Closed contours and summits",
+          "Calculating maximum possible elevation from innermost contour"
+        ]
+      },
+      {
+        "concept": "Closed contours and summits",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Calculating maximum possible elevation from innermost contour"
+        ]
+      },
+      {
+        "concept": "Calculating maximum possible elevation from innermost contour",
+        "knowledge_type": "concept",
+        "prerequisite_for": []
+      }
+    ],
+    "recommended_sequence": [
+      "Contour lines represent fixed elevations",
+      "Contour interval defines elevation spacing",
+      "Reading elevation from labeled contours",
+      "Closed contours and summits",
+      "Calculating maximum possible elevation from innermost contour"
+    ],
+    "common_misconceptions": [
+      {
+        "misconception": "The elevation labeled on the innermost contour is the summit elevation",
+        "why_it_happens": "Students conflate 'the highest labeled value' with 'the highest point' \u2014 they don't account for the unknown terrain inside the innermost ring.",
+        "probe_question": "If the innermost contour line reads 350 m, is the actual hilltop definitely 350 m? What if the hill keeps rising after that last line?"
+      },
+      {
+        "misconception": "The maximum possible elevation equals the innermost contour elevation plus exactly one full contour interval",
+        "why_it_happens": "Students correctly identify that the summit is 'one interval higher' but forget the boundary is exclusive \u2014 the summit must be strictly less than that value, or the next contour would exist.",
+        "probe_question": "If the summit could reach exactly 355 m, would the mapmaker have drawn a contour line there? So can we actually say 355 m is possible?"
+      },
+      {
+        "misconception": "Contour lines connect the highest points on the landscape",
+        "why_it_happens": "Students sometimes think contour lines trace ridges or peaks, rather than understanding they are horizontal slices at constant elevation.",
+        "probe_question": "If you walked along a contour line the entire time, would you ever go uphill or downhill?"
+      },
+      {
+        "misconception": "A map with a smaller contour interval gives a less accurate picture of the terrain",
+        "why_it_happens": "Students may confuse 'interval' with 'scale' \u2014 a smaller interval actually means more lines and more precision about elevation changes.",
+        "probe_question": "Would you rather have a contour interval of 1 meter or 100 meters if you were trying to find the exact height of a hill? Why?"
+      }
+    ]
+  },
+  "why-does-saturn-rotate-so-much-faster-than-earth-my-astronomy-homework-says-satu": {
+    "topic": "Why gas giant planets rotate faster than rocky planets",
+    "core_concepts": [
+      {
+        "concept": "Planetary rotation is not set at formation and locked forever",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Conservation of angular momentum in planet formation",
+          "Gas giants retained more angular momentum than rocky planets"
+        ]
+      },
+      {
+        "concept": "Conservation of angular momentum in planet formation",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Gas giants retained more angular momentum than rocky planets"
+        ]
+      },
+      {
+        "concept": "Gas giants retained more angular momentum than rocky planets",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Mass and size do not slow Saturn's spin \u2014 they explain it"
+        ]
+      },
+      {
+        "concept": "Mass and size do not slow Saturn's spin \u2014 they explain it",
+        "knowledge_type": "concept",
+        "prerequisite_for": [
+          "Braking forces are weaker for gas giants than rocky planets"
+        ]
+      },
+      {
+        "concept": "Braking forces are weaker for gas giants than rocky planets",
+        "knowledge_type": "concept",
+        "prerequisite_for": []
+      },
+      {
+        "concept": "Saturn's low density is a consequence of its composition, not a contradiction of its fast spin",
+        "knowledge_type": "narrative",
+        "prerequisite_for": []
+      }
+    ],
+    "recommended_sequence": [
+      "Planetary rotation is not set at formation and locked forever",
+      "Conservation of angular momentum in planet formation",
+      "Gas giants retained more angular momentum than rocky planets",
+      "Mass and size do not slow Saturn's spin \u2014 they explain it",
+      "Saturn's low density is a consequence of its composition, not a contradiction of its fast spin",
+      "Braking forces are weaker for gas giants than rocky planets"
+    ],
+    "common_misconceptions": [
+      {
+        "misconception": "Larger, heavier planets must rotate more slowly because they have more mass to move",
+        "why_it_happens": "Students import intuition from everyday experience \u2014 pushing a heavier object takes more effort \u2014 without distinguishing linear motion from rotational dynamics or considering where the spin came from.",
+        "probe_question": "If I told you that Jupiter \u2014 the most massive planet in the solar system \u2014 also has a shorter day than Earth (about 10 hours), would that surprise you? What does that tell you about the relationship between mass and rotation speed?"
+      },
+      {
+        "misconception": "Saturn spins fast because it is a gas planet and gas is 'lighter' or 'easier to spin'",
+        "why_it_happens": "Students conflate low density with low rotational inertia, and assume 'light' material spins more easily, without understanding that total angular momentum \u2014 not ease of spinning \u2014 is the key variable.",
+        "probe_question": "If I made a planet entirely out of hydrogen gas but gave it almost no angular momentum when it formed, would it spin fast? What does that tell you about what really determines the spin rate?"
+      },
+      {
+        "misconception": "Rotation speed is determined by distance from the Sun or orbital speed",
+        "why_it_happens": "Students sometimes conflate orbital period (how long it takes to go around the Sun) with rotation period (how long it takes to spin once), since both involve the word 'day' loosely.",
+        "probe_question": "Venus is closer to the Sun than Earth but rotates incredibly slowly \u2014 its day is longer than its year. If distance from the Sun determined rotation speed, what would you expect for Venus, and does that match reality?"
+      },
+      {
+        "misconception": "Saturn's rotation rate has always been 10.5 hours and never changes",
+        "why_it_happens": "Students treat planetary properties as fixed constants rather than outcomes of ongoing physical processes, and are unaware that tidal forces and other effects alter spin over geological time.",
+        "probe_question": "Earth's day used to be about 6 hours long billions of years ago. If rotation speed can change, what force do you think slowed Earth down \u2014 and why might that force have had less effect on Saturn?"
+      }
+    ]
+  }
+}

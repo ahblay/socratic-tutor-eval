@@ -21,6 +21,8 @@ webapp.db
 # Local-only documentation (not for the repo)
 docs/future_directions.md
 
+# macOS metadata
+.DS_Store
+
 # Local scratch files (transcripts, results, domain maps, PDFs)
 scratch/
-convolearn/results/
