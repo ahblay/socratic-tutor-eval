@@ -12,27 +12,37 @@ Covers:
 import pytest
 from unittest.mock import patch
 
-from convolearn.parse import _extract_first_student, _derive_slug, load_and_sample
+from convolearn.parse import _extract_first_student, _derive_slug, _count_tutor_turns, load_and_sample
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _conv(student_q: str, n_teacher: int = 1) -> str:
-    """Minimal conversation string starting with a Student turn."""
+def _conv(student_q: str, n_exchanges: int = 12) -> str:
+    """Conversation with an opening Student turn + n_exchanges (Teacher+Student) pairs.
+
+    n_exchanges equals the number of teacher turns (= total_tutor_turns in output).
+    Default n_exchanges=12 → 12 teacher turns, safely above the min_messages=10 threshold.
+    Use n_exchanges=10 to create a dialogue that falls below the threshold.
+    Use n_exchanges=11 for exactly at the threshold.
+    """
     lines = [f"Student: {student_q}"]
-    for i in range(n_teacher):
+    for i in range(n_exchanges):
         lines.append(f"Teacher: Response {i}.")
-        lines.append("Student: I see.")
+        lines.append("Student: Follow-up.")
     return "\n".join(lines)
 
 
-def _make_rows(student_q: str, count: int, num_exchanges: int = 11) -> list[dict]:
-    """Return `count` fake dataset rows for a given opening question."""
+def _make_rows(student_q: str, count: int, n_exchanges: int = 12, num_exchanges: int = 11) -> list[dict]:
+    """Return `count` fake dataset rows for a given opening question.
+
+    n_exchanges controls the actual conversation length (post-normalization turn count).
+    num_exchanges is the metadata field stored in the row (not used for filtering).
+    """
     return [
         {
-            "cleaned_conversation": _conv(student_q),
+            "cleaned_conversation": _conv(student_q, n_exchanges),
             "earthscience_topic": "Earth's Energy",
             "num_exchanges": num_exchanges,
             "effectiveness_consensus": 3.0 + (i % 2) * 0.5,
@@ -40,6 +50,47 @@ def _make_rows(student_q: str, count: int, num_exchanges: int = 11) -> list[dict
         }
         for i in range(count)
     ]
+
+
+# ===========================================================================
+# _count_turns
+# ===========================================================================
+
+class TestCountTutorTurns:
+
+    def test_empty_string_returns_zero(self):
+        assert _count_tutor_turns("") == 0
+
+    def test_only_student_returns_zero(self):
+        assert _count_tutor_turns("Student: Hello?") == 0
+
+    def test_single_teacher_turn(self):
+        assert _count_tutor_turns("Teacher: Think about it.") == 1
+
+    def test_counts_only_teacher_turns(self):
+        conv = "Student: Why?\nTeacher: Think.\nStudent: I see.\nTeacher: Good."
+        assert _count_tutor_turns(conv) == 2  # 4 total turns but only 2 teacher
+
+    def test_multiline_teacher_counts_as_one_turn(self):
+        conv = (
+            "Student: Why?\n"
+            "Teacher: First line.\n"
+            "Continuation of teacher response.\n"
+            "Student: I see.\n"
+        )
+        assert _count_tutor_turns(conv) == 1
+
+    def test_empty_teacher_label_not_counted(self):
+        conv = "Teacher:\nStudent: Hello."
+        assert _count_tutor_turns(conv) == 0  # empty teacher content excluded
+
+    def test_conv_helper_n_exchanges_equals_teacher_turns(self):
+        # n_exchanges=10 → exactly 10 teacher turns
+        assert _count_tutor_turns(_conv("Why?", n_exchanges=10)) == 10
+
+    def test_conv_helper_default_produces_above_threshold(self):
+        # default n_exchanges=12 → 12 teacher turns > 10
+        assert _count_tutor_turns(_conv("Why?")) == 12
 
 
 # ===========================================================================
@@ -128,48 +179,58 @@ class TestLoadAndSample:
         """Return a context manager that patches load_dataset to yield `rows`."""
         return patch("datasets.load_dataset", return_value=rows)
 
-    # --- Filtering: min_exchanges ---
+    # --- Filtering: min_messages (post-normalization turn count) ---
 
-    def test_rows_below_min_exchanges_filtered_out(self):
+    def test_rows_below_min_messages_filtered_out(self):
+        # n_exchanges=12 → 12 teacher turns (qualifies); n_exchanges=8 → 8 teacher turns (below)
         rows = (
-            _make_rows("Sky blue?", count=25, num_exchanges=11)   # qualifies
-            + _make_rows("Sky blue?", count=5,  num_exchanges=5)  # below threshold
+            _make_rows("Sky blue?", count=25, n_exchanges=12)
+            + _make_rows("Sky blue?", count=5,  n_exchanges=8)
         )
         with self._patch(rows):
-            result = load_and_sample(min_dialogues=20, min_exchanges=10, sample_size=5)
+            result = load_and_sample(min_dialogues=20, min_messages=10, sample_size=5)
         # 25 qualifying rows ≥ 20 → prompt kept
         assert len(result) == 1
         assert len(result[0]["dialogues"]) == 25
 
-    def test_all_rows_below_min_exchanges_excludes_prompt(self):
-        rows = _make_rows("Sky blue?", count=25, num_exchanges=3)
+    def test_all_rows_below_min_messages_excludes_prompt(self):
+        # n_exchanges=7 → 7 teacher turns, well below 10
+        rows = _make_rows("Sky blue?", count=25, n_exchanges=7)
         with self._patch(rows):
-            result = load_and_sample(min_dialogues=20, min_exchanges=10, sample_size=5)
+            result = load_and_sample(min_dialogues=20, min_messages=10, sample_size=5)
         assert result == []
 
-    def test_exactly_min_exchanges_qualifies(self):
-        rows = _make_rows("Sky blue?", count=20, num_exchanges=10)
+    def test_exactly_min_messages_qualifies(self):
+        # n_exchanges=10 → exactly 10 teacher turns, at threshold
+        rows = _make_rows("Sky blue?", count=20, n_exchanges=10)
         with self._patch(rows):
-            result = load_and_sample(min_dialogues=20, min_exchanges=10, sample_size=5)
+            result = load_and_sample(min_dialogues=20, min_messages=10, sample_size=5)
         assert len(result) == 1
+
+    def test_one_below_min_messages_excluded(self):
+        # n_exchanges=9 → 9 teacher turns, just below threshold of 10
+        rows = _make_rows("Sky blue?", count=25, n_exchanges=9)
+        with self._patch(rows):
+            result = load_and_sample(min_dialogues=20, min_messages=10, sample_size=5)
+        assert result == []
 
     # --- Filtering: min_dialogues ---
 
     def test_prompt_with_too_few_qualifying_rows_excluded(self):
         # "Sky blue?" has 25 qualifying rows; "Rain?" has only 10
         rows = (
-            _make_rows("Sky blue?", count=25, num_exchanges=11)
-            + _make_rows("Rain?",    count=10, num_exchanges=11)
+            _make_rows("Sky blue?", count=25)
+            + _make_rows("Rain?",    count=10)
         )
         with self._patch(rows):
-            result = load_and_sample(min_dialogues=20, min_exchanges=10, sample_size=5)
+            result = load_and_sample(min_dialogues=20, min_messages=10, sample_size=5)
         assert len(result) == 1
         assert result[0]["question_prompt"] == "Sky blue?"
 
     def test_exactly_min_dialogues_included(self):
-        rows = _make_rows("Sky blue?", count=20, num_exchanges=11)
+        rows = _make_rows("Sky blue?", count=20)
         with self._patch(rows):
-            result = load_and_sample(min_dialogues=20, min_exchanges=10, sample_size=5)
+            result = load_and_sample(min_dialogues=20, min_messages=10, sample_size=5)
         assert len(result) == 1
 
     # --- Sampling ---
@@ -178,15 +239,15 @@ class TestLoadAndSample:
         # 5 distinct qualifying prompts, sample_size=3
         rows = []
         for i in range(5):
-            rows += _make_rows(f"Question {i}?", count=25, num_exchanges=11)
+            rows += _make_rows(f"Question {i}?", count=25)
         with self._patch(rows):
-            result = load_and_sample(min_dialogues=20, min_exchanges=10, sample_size=3)
+            result = load_and_sample(min_dialogues=20, min_messages=10, sample_size=3)
         assert len(result) == 3
 
     def test_fewer_qualifying_prompts_than_sample_size_returns_all(self):
-        rows = _make_rows("Only prompt?", count=25, num_exchanges=11)
+        rows = _make_rows("Only prompt?", count=25)
         with self._patch(rows):
-            result = load_and_sample(min_dialogues=20, min_exchanges=10, sample_size=10)
+            result = load_and_sample(min_dialogues=20, min_messages=10, sample_size=10)
         assert len(result) == 1
 
     def test_empty_dataset_returns_empty(self):
@@ -197,7 +258,7 @@ class TestLoadAndSample:
     def test_seed_produces_reproducible_results(self):
         rows = []
         for i in range(10):
-            rows += _make_rows(f"Question {i}?", count=25, num_exchanges=11)
+            rows += _make_rows(f"Question {i}?", count=25)
         with self._patch(rows):
             r1 = load_and_sample(sample_size=5, seed=42)
         with self._patch(rows):
@@ -207,7 +268,7 @@ class TestLoadAndSample:
     def test_different_seeds_may_produce_different_results(self):
         rows = []
         for i in range(20):
-            rows += _make_rows(f"Question {i}?", count=25, num_exchanges=11)
+            rows += _make_rows(f"Question {i}?", count=25)
         with self._patch(rows):
             r1 = load_and_sample(sample_size=5, seed=1)
         with self._patch(rows):
@@ -218,7 +279,7 @@ class TestLoadAndSample:
     # --- Output format ---
 
     def test_output_has_required_keys(self):
-        rows = _make_rows("Sky blue?", count=20, num_exchanges=11)
+        rows = _make_rows("Sky blue?", count=20)
         with self._patch(rows):
             result = load_and_sample(min_dialogues=20, sample_size=5)
         entry = result[0]
@@ -228,20 +289,20 @@ class TestLoadAndSample:
         assert "dialogues" in entry
 
     def test_prompt_id_is_slug_of_question(self):
-        rows = _make_rows("Sky blue?", count=20, num_exchanges=11)
+        rows = _make_rows("Sky blue?", count=20)
         with self._patch(rows):
             result = load_and_sample(min_dialogues=20, sample_size=5)
         assert result[0]["prompt_id"] == "sky-blue"
 
     def test_dialogue_idx_sequential_from_zero(self):
-        rows = _make_rows("Sky blue?", count=20, num_exchanges=11)
+        rows = _make_rows("Sky blue?", count=20)
         with self._patch(rows):
             result = load_and_sample(min_dialogues=20, sample_size=5)
         idxs = [d["dialogue_idx"] for d in result[0]["dialogues"]]
         assert idxs == list(range(20))
 
     def test_dialogue_contains_ground_truth_fields(self):
-        rows = _make_rows("Sky blue?", count=20, num_exchanges=11)
+        rows = _make_rows("Sky blue?", count=20)
         with self._patch(rows):
             result = load_and_sample(min_dialogues=20, sample_size=5)
         d = result[0]["dialogues"][0]
@@ -251,7 +312,7 @@ class TestLoadAndSample:
         assert "cleaned_conversation" in d
 
     def test_earthscience_topic_from_first_row(self):
-        rows = _make_rows("Sky blue?", count=20, num_exchanges=11)
+        rows = _make_rows("Sky blue?", count=20)
         rows[0]["earthscience_topic"] = "Special Topic"
         with self._patch(rows):
             result = load_and_sample(min_dialogues=20, sample_size=5)

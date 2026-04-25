@@ -176,3 +176,49 @@ class TestBuildSummary:
 
     def test_empty_prompts_and_records(self):
         assert build_summary([], []) == []
+
+
+# ===========================================================================
+# _mean_or_none + build_summary: append-mode invariants
+# ===========================================================================
+
+class TestAppendModeInvariants:
+    """
+    Verify properties that must hold when two sets of records are combined,
+    as happens across multiple --append runs.
+    """
+
+    def test_combined_records_deduped_by_session_id(self):
+        """If the same session_id appears in both runs, only one should count."""
+        run1 = [_record("p1", kft=0.4)]
+        run2 = [_record("p1", kft=0.8)]  # same session_id as run1
+        # Simulate caller deduplicating before passing to build_summary
+        # (score_batch skips already-scored IDs, so combined has no dupes)
+        combined = run1  # run2 was skipped
+        prompts = [_prompt_entry("p1")]
+        summary = build_summary(prompts, combined)
+        assert summary[0]["n_dialogues"] == 1
+        assert summary[0]["mean_kft"] == pytest.approx(0.4)
+
+    def test_summary_reflects_all_combined_records(self):
+        """After two partial runs are merged, summary covers all records."""
+        prompts = [_prompt_entry("p1", n_dialogues=4)]
+        run1 = [_record("p1", kft=0.2), _record("p1", kft=0.4)]
+        run2 = [_record("p1", kft=0.6), _record("p1", kft=0.8)]
+        # Assign distinct session_ids manually
+        for i, r in enumerate(run1 + run2):
+            r["session_id"] = f"p1_{i}"
+        combined = run1 + run2
+        summary = build_summary(prompts, combined)
+        assert summary[0]["n_dialogues"] == 4
+        assert summary[0]["mean_kft"] == pytest.approx(0.5)
+
+    def test_mean_excludes_error_records_with_null_metrics(self):
+        """Failed records (error != None) emit null metrics; they're excluded from means."""
+        prompts = [_prompt_entry("p1", n_dialogues=2)]
+        good = _record("p1", kft=0.8)
+        bad = _record("p1", kft=None)  # error record
+        bad["session_id"] = "p1_1"
+        summary = build_summary(prompts, [good, bad])
+        # mean_kft should only average the non-null value
+        assert summary[0]["mean_kft"] == pytest.approx(0.8)

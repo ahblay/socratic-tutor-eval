@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import time
 from copy import deepcopy
 from pathlib import Path
 
@@ -481,8 +482,8 @@ Analyze the topic below and produce a structured domain map. Think carefully abo
 1. **Core concepts** — The key ideas, ordered from foundational to advanced. Each \
    concept should represent a single atomic teaching unit: one idea, one rule, or \
    one convention. As a test: if you cannot assign a single `knowledge_type` to \
-   the concept without hedging, split it into two separate concepts. Aim for \
-   12–20 concepts for a typical article-length topic.
+   the concept without hedging, split it into two separate concepts. \
+{target_concepts_hint}
 2. **Required skills** — The reasoning abilities the student needs (e.g., "apply X \
    to an unfamiliar case", "distinguish between X and Y"). Skills are more important \
    than facts.
@@ -742,14 +743,20 @@ class SocraticTutor(AbstractTutor):
             },
         ]
 
-        # Call the API
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=2048,
-            thinking={"type": "enabled", "budget_tokens": 1024},
-            system=system,
-            messages=messages,
-        )
+        # Call the API (extended thinking only supported on Sonnet/Opus)
+        create_kwargs: dict = dict(model=self.model, max_tokens=2048, system=system, messages=messages)
+        if "haiku" not in self.model:
+            create_kwargs["thinking"] = {"type": "enabled", "budget_tokens": 1024}
+        for _attempt in range(5):
+            try:
+                response = self.client.messages.create(**create_kwargs)
+                break
+            except anthropic.RateLimitError:
+                if _attempt == 4:
+                    raise
+                wait = 2 ** (_attempt + 1)
+                print(f"  [retry] socratic rate limit, retrying in {wait}s", file=sys.stderr, flush=True)
+                time.sleep(wait)
 
         # With extended thinking the response contains a ThinkingBlock followed
         # by a TextBlock — extract each by type.
@@ -1058,9 +1065,19 @@ class SocraticTutor(AbstractTutor):
 # Domain map helpers
 # ---------------------------------------------------------------------------
 
-def compute_domain_map(topic: str, client: anthropic.Anthropic) -> dict:
+_DEFAULT_CONCEPTS_HINT = "Aim for 12–20 concepts for a typical article-length topic."
+
+
+def compute_domain_map(
+    topic: str,
+    client: anthropic.Anthropic,
+    target_concepts_hint: str = _DEFAULT_CONCEPTS_HINT,
+) -> dict:
     """Call the domain-mapper LLM and return the parsed domain map dict."""
-    prompt = _DOMAIN_MAPPER_PROMPT.format(topic=topic)
+    prompt = _DOMAIN_MAPPER_PROMPT.format(
+        topic=topic,
+        target_concepts_hint=target_concepts_hint,
+    )
     try:
         response = client.messages.create(
             model="claude-sonnet-4-6",

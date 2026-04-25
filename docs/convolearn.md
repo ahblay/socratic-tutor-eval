@@ -13,17 +13,27 @@ completeness ratings.
 ```bash
 source .venv/bin/activate
 
-# Full pipeline — sample dataset, generate domain maps, score all dialogues
+# Step 1 — Inspect which prompts will be selected (no API calls, instant)
+python -m convolearn.score_batch --parse-only --sample-size 7
+
+# Step 2 — Validate cheaply: score 3 dialogues per prompt using the saved sample
+python -m convolearn.score_batch \
+  --from-sample \
+  --max-dialogues-per-prompt 3 \
+  --no-nac --no-lcq \
+  --output-dir convolearn/results/
+
+# Step 3 — Full production run once you're satisfied with the sample
 python -m convolearn.score_batch \
   --dataset masharma/convolearn \
   --sample-size 7 \
-  --no-nac \
-  --no-lcq \
+  --no-nac --no-lcq \
   --output-dir convolearn/results/
 ```
 
-This one command runs all five stages automatically and writes four output files to
-`convolearn/results/`. No pre-processing or separate batch-creation step is required.
+All five stages run automatically inside a single command. No pre-processing or
+separate batch-creation step is required — but the `--parse-only` and `--from-sample`
+flags let you inspect and iterate cheaply before committing to a full scoring run.
 
 ---
 
@@ -69,7 +79,11 @@ Downloads the dataset (HuggingFace cache after first run), extracts each row's f
 utterance, groups rows by that question prompt, and draws a reproducible random sample.
 
 **Filtering logic:**
-1. For each question prompt group, keep only rows with `num_exchanges >= --min-exchanges`.
+1. For each question prompt group, keep only rows whose `cleaned_conversation` parses to
+   at least `--min-messages` non-empty turns. This count is computed after normalization
+   (multi-line responses merged, empty-content turns dropped), so it reflects the actual
+   message count that `analyze_transcript()` will see — not the dataset's `num_exchanges`
+   metadata field, which can overcount.
 2. Keep only groups with ≥ `--min-dialogues` qualifying rows.
 3. Randomly sample up to `--sample-size` prompts (seed-controlled via `--seed`).
 
@@ -79,11 +93,17 @@ With default settings on ConvoLearn, 46 prompts qualify; 7 are selected.
 
 ### Stage 2 — Domain Map Generation (`convolearn/domain_maps.py`)
 
-For each unique question prompt in the sample, generates a two-pass domain map
-(structure pass via `compute_domain_map()`, enrichment pass via `enrich_domain_map()`)
-using the question text as the topic. Maps are cached at `~/.socratic-domain-cache/`
-by topic slug — **re-running the pipeline on the same prompts costs no additional API calls
-after the first run.**
+For each unique question prompt in the sample, generates a domain map using the question
+text as the topic. The generation mode depends on `--domain-source`:
+
+- **`sentence` (default):** single-pass generation targeting 4–7 KCs, no enrichment. Maps
+  are cached at `~/.socratic-domain-cache/` with a `-slim` key suffix. Then trimmed to
+  `depth_priority == "essential"` KCs (up to 7) with non-evaluation fields stripped.
+  Costs **1 Sonnet call** per prompt.
+- **`article`:** two-pass generation (structure + enrichment) targeting 12–20 KCs — matches
+  the webapp's full domain maps. Costs **2 Sonnet calls** per prompt.
+
+**Re-running on the same prompts with the same `--domain-source` costs nothing after the first run.**
 
 **Output:** `domain_maps.json`
 
@@ -227,14 +247,18 @@ One record per sampled prompt with per-prompt means:
 | `--dataset` | `masharma/convolearn` | HuggingFace dataset name |
 | `--sample-size N` | `7` | Max number of unique question prompts to sample |
 | `--min-dialogues N` | `20` | Min qualifying dialogues required per prompt |
-| `--min-exchanges N` | `10` | Min `num_exchanges` per dialogue to qualify |
+| `--min-messages N` | `10` | Min actual parsed tutor turns per dialogue (post-normalization) |
 | `--seed N` | `42` | RNG seed for reproducible prompt sampling |
 | `--nac` / `--no-nac` | `--nac` | Enable/disable NAC scoring. `--no-nac` → `nac: null` |
 | `--lcq` / `--no-lcq` | `--lcq` | Enable/disable LCQ in output. `--no-lcq` → `lcq: null` |
 | `--initial-knowledge` | `tabula_rasa` | BKT prior preset for all sessions |
-| `--domain-source` | `sentence` | Domain map input: `sentence` uses question text directly |
+| `--domain-source` | `sentence` | `sentence` (default): compact 4–7 KC map, no enrichment — calibrated to brief Q&A sessions. `article`: full 12–20 KC enriched map. |
 | `--workers N` | `4` | ThreadPoolExecutor parallelism for Stage 4 |
 | `--output-dir PATH` | `convolearn/results/` | Directory for all output files |
+| `--parse-only` | off | Run Stage 1 only: sample the dataset, print a summary, and exit. **No API calls.** |
+| `--from-sample` | off | Skip Stage 1: load `sampled_dialogues.json` from `--output-dir`. Also skips Stage 2 if `domain_maps.json` already exists. |
+| `--max-dialogues-per-prompt N` | no limit | Cap the number of dialogues scored per prompt (taken in index order). Applied to the work list only — `sampled_dialogues.json` on disk is never modified. |
+| `--append` | off | Append new scores to an existing `scored_results.json` rather than overwriting. Already-scored session IDs are skipped automatically. The summary is recomputed over all combined results after each run. |
 
 ### `--initial-knowledge` values
 
@@ -258,6 +282,118 @@ call. Disabling them sets the output field to `null` so the analysis phase can d
 Use `--no-nac --no-lcq` when you want to run a quick scan to check domain map quality (KFT
 and PR are pure-Python, cost-free) or when you want to measure NAC and LCQ calibration
 separately across multiple runs.
+
+---
+
+## Recommended Workflow
+
+### Inspect the sample before scoring
+
+`--parse-only` runs Stage 1 only. It downloads the dataset (cached by HuggingFace
+after first run), groups rows, applies the filter, samples, and prints a summary.
+**Zero Anthropic API calls.**
+
+```bash
+python -m convolearn.score_batch \
+  --parse-only \
+  --sample-size 7 \
+  --min-messages 10 \
+  --seed 42 \
+  --output-dir convolearn/results/
+```
+
+Example output:
+```
+=== Stage 1: Parse & Sample ===
+[parse] 46 prompts meet criteria (>=20 dialogues with >=10 exchanges)
+[parse] Sampled 7 prompts
+
+=== Selected prompts ===
+  1. [how-do-ocean-currents-like-the-gulf-stream-affect-the-climate-of-nearby-coas]
+     Topic : Earth's Energy
+     Question: How do ocean currents like the Gulf Stream affect the climate of nearby...
+     Dialogues: 38
+  2. [why-does-the-equator-receive-more-solar-energy-than-the-polar-regions]
+     ...
+
+Total: 7 prompts, 261 dialogues
+Sample written to: convolearn/results/sampled_dialogues.json
+
+(--parse-only: stopping before domain map generation and scoring)
+```
+
+Adjust `--sample-size`, `--seed`, or filter flags until you're happy with the
+selection. The sample is saved to `sampled_dialogues.json` for the next step.
+
+### Validate cheaply before a full run
+
+Once you have a sample you like, score just a few dialogues per prompt to check
+that domain maps are reasonable and scores look sensible:
+
+```bash
+python -m convolearn.score_batch \
+  --from-sample \
+  --max-dialogues-per-prompt 3 \
+  --no-nac --no-lcq \
+  --workers 2 \
+  --output-dir convolearn/results/
+```
+
+`--from-sample` loads `sampled_dialogues.json` from disk and skips Stage 1 entirely.
+If `domain_maps.json` already exists it also skips Stage 2. With 7 prompts × 3
+dialogues = 21 scoring calls this typically takes 2–5 minutes.
+
+Inspect `convolearn/results/scored_results.json` — check that `total_tutor_turns`
+looks reasonable (≥ 8 for valid sessions), that `kft` is not uniformly 0 (which
+would indicate a domain map topic mismatch), and that no sessions failed.
+
+### Accumulate results across multiple runs
+
+Use `--append` to add new scores to an existing `scored_results.json` without
+re-scoring what's already there. Session IDs are deduplicated automatically.
+
+```bash
+# Run 1: score 5 dialogues per prompt
+python -m convolearn.score_batch \
+  --from-sample --append \
+  --max-dialogues-per-prompt 5 \
+  --no-nac --no-lcq \
+  --output-dir convolearn/results/
+# → scored_results.json now has 35 records (7 prompts × 5)
+
+# Run 2: score 5 more (indices 5–9)
+python -m convolearn.score_batch \
+  --from-sample --append \
+  --max-dialogues-per-prompt 10 \
+  --no-nac --no-lcq \
+  --output-dir convolearn/results/
+# → scored_results.json now has 70 records (5 new per prompt, 5 skipped)
+
+# Run 3: score the rest — no cap means all remaining dialogues
+python -m convolearn.score_batch \
+  --from-sample --append \
+  --no-nac --no-lcq \
+  --output-dir convolearn/results/
+# → scored_results.json now has all ~261 records
+```
+
+`--max-dialogues-per-prompt` is applied to the **work list only** — it never
+modifies `sampled_dialogues.json` on disk, so the full sample is always available
+for future runs. `summary.json` is recomputed over all combined results after
+each `--append` run.
+
+### Full production run in one shot
+
+```bash
+python -m convolearn.score_batch \
+  --from-sample \
+  --no-nac --no-lcq \
+  --workers 4 \
+  --output-dir convolearn/results/
+```
+
+Using `--from-sample` preserves the exact same prompt selection as your validation
+run. Remove `--from-sample` only if you want to re-sample from scratch.
 
 ---
 
@@ -315,8 +451,9 @@ For a 10-exchange dialogue (`num_exchanges=10`), that is roughly 20 total calls.
 Note: disabling NAC and LCQ does **not** reduce the call count — both are part of the same
 per-tutor-turn prompt. The flags only affect which values appear in the output.
 
-Domain map generation (Stage 2) costs **2 Sonnet calls per prompt** (structure + enrichment pass).
-This is a one-time cost; maps are cached and re-used on all subsequent runs.
+Domain map generation (Stage 2) costs **1 Sonnet call per prompt** with `--domain-source sentence`
+(default), or **2 Sonnet calls** with `--domain-source article`. This is a one-time cost per mode;
+maps are cached and re-used on all subsequent runs.
 
 ---
 

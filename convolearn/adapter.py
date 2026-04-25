@@ -48,6 +48,15 @@ def _parse_conversation(text: str) -> list[dict]:
     return turns
 
 
+def _flatten_domain_map(domain_map: dict) -> dict:
+    """Strip prerequisite_for edges so all KCs are always frontier-eligible."""
+    flat = [
+        {**c, "prerequisite_for": []}
+        for c in domain_map.get("core_concepts", [])
+    ]
+    return {**domain_map, "core_concepts": flat}
+
+
 def adapt_dialogue(
     prompt_id: str,
     question_prompt: str,
@@ -71,4 +80,4 @@ def adapt_dialogue(
         "bkt_preset": bkt_preset,
     }
 
-    return prepare_analysis_input(raw, domain_map)
+    return prepare_analysis_input(raw, _flatten_domain_map(domain_map))

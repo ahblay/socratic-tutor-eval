@@ -9,9 +9,35 @@ from __future__ import annotations
 import json
 import re
 import sys
+import time
 from dataclasses import dataclass, field
 
 import anthropic
+
+
+# ---------------------------------------------------------------------------
+# Shared Haiku call helper with exponential backoff on rate-limit errors
+# ---------------------------------------------------------------------------
+
+def _create_with_retry(client: anthropic.Anthropic, max_retries: int = 4, **kwargs):
+    """
+    Call client.messages.create(**kwargs) and retry on RateLimitError (429)
+    using exponential backoff: 2, 4, 8, 16 seconds.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            return client.messages.create(**kwargs)
+        except anthropic.RateLimitError:
+            if attempt == max_retries:
+                raise
+            wait = 2 ** (attempt + 1)
+            print(
+                f"  [retry] rate limit hit, retrying in {wait}s "
+                f"(attempt {attempt + 1}/{max_retries})",
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(wait)
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +268,8 @@ def classify_observations(
                 f"  [classifier] {len(kcs)} KCs, prompt ~{len(prompt)//4} tokens",
                 file=sys.stderr,
             )
-        response = client.messages.create(
+        response = _create_with_retry(
+            client,
             model="claude-haiku-4-5-20251001",
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],

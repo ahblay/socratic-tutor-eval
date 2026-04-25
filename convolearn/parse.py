@@ -27,12 +27,37 @@ def _derive_slug(s: str) -> str:
     return slug[:80]
 
 
+def _count_tutor_turns(conversation: str) -> int:
+    """Count non-empty teacher turns after normalization — mirrors total_tutor_turns in output."""
+    count = 0
+    current_role: str | None = None
+    current_lines: list[str] = []
+
+    for line in conversation.splitlines():
+        stripped = line.strip()
+        m = re.match(r"^(Student|Teacher):\s*(.*)", stripped)
+        if m:
+            if current_role == "teacher" and " ".join(current_lines).strip():
+                count += 1
+            current_role = m.group(1).lower()
+            first = m.group(2).strip()
+            current_lines = [first] if first else []
+        elif current_role is not None and stripped:
+            current_lines.append(stripped)
+
+    if current_role == "teacher" and " ".join(current_lines).strip():
+        count += 1
+
+    return count
+
+
 def load_and_sample(
     dataset_name: str = "masharma/convolearn",
     min_dialogues: int = 20,
-    min_exchanges: int = 10,
+    min_messages: int = 10,
     sample_size: int = 7,
     seed: int = 42,
+    exclude_ids: set[str] | None = None,
 ) -> list[dict]:
     """
     Load dataset, group by first Student utterance, filter, and sample.
@@ -55,7 +80,7 @@ def load_and_sample(
                 "earthscience_topic": row.get("earthscience_topic", ""),
                 "rows": [],
             }
-        if row.get("num_exchanges", 0) >= min_exchanges:
+        if _count_tutor_turns(row["cleaned_conversation"]) >= min_messages:
             groups[qp]["rows"].append(dict(row))
 
     # Filter: must have >= min_dialogues qualifying rows
@@ -64,9 +89,13 @@ def load_and_sample(
         for qp, data in groups.items()
         if len(data["rows"]) >= min_dialogues
     ]
+    if exclude_ids:
+        before = len(qualifying)
+        qualifying = [(qp, data) for qp, data in qualifying if _derive_slug(qp) not in exclude_ids]
+        print(f"[parse] Excluded {before - len(qualifying)} already-sampled prompts", flush=True)
     print(
         f"[parse] {len(qualifying)} prompts meet criteria "
-        f"(>={min_dialogues} dialogues with >={min_exchanges} exchanges)",
+        f"(>={min_dialogues} dialogues with >={min_messages} messages)",
         flush=True,
     )
 

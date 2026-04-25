@@ -278,10 +278,20 @@ def _save_to_cache(cache_file: Path, dm: dict) -> None:
         print(f"  [domain-resolver] could not write cache: {e}", file=sys.stderr)
 
 
-def _generate_and_enrich(topic_or_text: str, client: anthropic.Anthropic, skip_enrich: bool = False) -> dict:
+def _generate_and_enrich(
+    topic_or_text: str,
+    client: anthropic.Anthropic,
+    skip_enrich: bool = False,
+    target_concepts_hint: str | None = None,
+) -> dict:
     """Run pass 1 + pass 2 domain map generation."""
-    from tutor_eval.tutors.socratic import compute_domain_map, enrich_domain_map
-    dm = compute_domain_map(topic_or_text, client)
+    from tutor_eval.tutors.socratic import (
+        compute_domain_map,
+        enrich_domain_map,
+        _DEFAULT_CONCEPTS_HINT,
+    )
+    hint = target_concepts_hint if target_concepts_hint is not None else _DEFAULT_CONCEPTS_HINT
+    dm = compute_domain_map(topic_or_text, client, target_concepts_hint=hint)
     if not skip_enrich:
         dm = enrich_domain_map(dm, client)
     return dm
@@ -292,6 +302,7 @@ def resolve_domain_map(
     client: anthropic.Anthropic,
     cache_dir: Path = DEFAULT_CACHE_DIR,
     skip_enrich: bool = False,
+    target_concepts_hint: str | None = None,
 ) -> dict:
     """
     Return a normalized, analysis-ready domain map for the given raw transcript.
@@ -328,7 +339,8 @@ def resolve_domain_map(
 
         print(f"  [domain-resolver] Fetching Wikipedia article: {url}", file=sys.stderr)
         article_text = _fetch_wikipedia_text(url)
-        dm = _generate_and_enrich(article_text, client, skip_enrich=skip_enrich)
+        dm = _generate_and_enrich(article_text, client, skip_enrich=skip_enrich,
+                                   target_concepts_hint=target_concepts_hint)
         _save_to_cache(cache_file, dm)
         return dm
 
@@ -338,6 +350,10 @@ def resolve_domain_map(
         raise ValueError("Raw transcript has no domain map source: provide 'domain_map', 'wikipedia_url', or 'topic'")
 
     cache_key = _derive_slug(topic)
+    # Non-default hint or skip_enrich changes the generated map — use a separate cache slot
+    # so slim maps don't collide with full webapp maps for the same topic.
+    if skip_enrich or target_concepts_hint is not None:
+        cache_key += "-slim"
     cache_file = cache_dir / f"{cache_key}.json"
 
     cached = _load_from_cache(cache_file)
@@ -353,6 +369,7 @@ def resolve_domain_map(
         return dm
 
     print(f"  [domain-resolver] Generating domain map for topic: {topic!r}", file=sys.stderr)
-    dm = _generate_and_enrich(topic, client, skip_enrich=skip_enrich)
+    dm = _generate_and_enrich(topic, client, skip_enrich=skip_enrich,
+                               target_concepts_hint=target_concepts_hint)
     _save_to_cache(cache_file, dm)
     return dm

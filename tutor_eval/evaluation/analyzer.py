@@ -20,6 +20,7 @@ import anthropic
 from tutor_eval.evaluation.bkt import (
     BKTState,
     P_L0,
+    _create_with_retry,
     classify_observations,
     get_knowledge_frontier,
     update_bkt,
@@ -261,10 +262,29 @@ What behavioral type is the tutor's response?
 - "narrative": provides a structured content block, then asks student to reason
 
 ## Classification 4 — warranted_type
-What response type was most appropriate given the targeted KC and student knowledge?
-- Targeted KC type is "convention" AND student has low mastery (p < 0.5): "convention"
-- Targeted KC type is "narrative" AND student has low mastery (p < 0.5): "narrative"
-- Otherwise (concept KC, or student has moderate/high mastery): "concept"
+What response type was most appropriate given the targeted KC and this specific \
+student's current knowledge?
+
+Core question: could this student, at their current level of understanding, reason \
+toward or discover the key insight of this KC — or does the content need to be \
+provided first?
+
+- "concept": student can reason toward the answer through guided questions. Use \
+  when the KC involves a logical relationship or derivable pattern, OR when the \
+  student already has substantial mastery (p ≥ 0.5) — even for KCs that might \
+  otherwise require provision.
+- "convention": KC centers on an arbitrary standard, rule, or value that cannot \
+  be derived by reasoning (e.g. a specific measurement, a naming convention, a \
+  regulatory definition). Use only when the student has low mastery (p < 0.5) \
+  and the content is genuinely non-derivable.
+- "narrative": KC requires a structured conceptual framework to be presented \
+  before the student can reason productively. Use only when the student has low \
+  mastery (p < 0.5) and the framework is too large to elicit through questions.
+
+Base your judgment on the student's demonstrated understanding in the preceding \
+message and their BKT state — not solely on the KC's pre-assigned type label. A \
+student who has shown they can approximate or reason around a KC warrants "concept" \
+even if the KC is conventionally non-derivable.
 
 ## Classification 5 — mrq_verdict
 {mrq_instructions}
@@ -357,7 +377,8 @@ def _classify_tutor_turn(
     )
 
     try:
-        response = client.messages.create(
+        response = _create_with_retry(
+            client,
             model="claude-haiku-4-5-20251001",
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],

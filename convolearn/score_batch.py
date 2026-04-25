@@ -10,7 +10,15 @@ Stages:
   4  score        — run analyze_transcript in parallel → scored_results.json
   5  summarise    — per-prompt aggregate stats → summary.json
 
-Run:
+Common workflows:
+
+  # Inspect the selected sample before any API calls
+  python -m convolearn.score_batch --parse-only --sample-size 3
+
+  # Score a small slice to validate (re-uses existing sampled_dialogues.json)
+  python -m convolearn.score_batch --from-sample --max-dialogues-per-prompt 3 --no-nac --no-lcq
+
+  # Full production run
   python -m convolearn.score_batch --dataset masharma/convolearn --no-nac --no-lcq
 """
 
@@ -146,7 +154,7 @@ def main() -> None:
     parser.add_argument("--dataset", default="masharma/convolearn")
     parser.add_argument("--sample-size", type=int, default=7)
     parser.add_argument("--min-dialogues", type=int, default=20)
-    parser.add_argument("--min-exchanges", type=int, default=10)
+    parser.add_argument("--min-messages", type=int, default=10)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--nac", dest="nac", action="store_true", default=True,
@@ -172,10 +180,45 @@ def main() -> None:
     parser.add_argument(
         "--domain-source", default="sentence",
         choices=["sentence", "article"],
-        help="Domain map source: sentence (default) or LLM-expanded article"
+        help=(
+            "sentence (default): compact 4–7 KC map, no enrichment pass — "
+            "calibrated to ConvoLearn's brief Q&A sessions. "
+            "article: full 12–20 KC enriched map."
+        ),
     )
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--output-dir", default="convolearn/results/")
+    parser.add_argument(
+        "--parse-only", action="store_true",
+        help="Run Stage 1 only: sample the dataset, print a summary, and exit. "
+             "No API calls are made. Use this to inspect the selected prompts "
+             "before committing to a full scoring run.",
+    )
+    parser.add_argument(
+        "--from-sample", action="store_true",
+        help="Skip Stage 1: load sampled_dialogues.json from --output-dir instead "
+             "of re-downloading and re-sampling the dataset. Also skips Stage 2 "
+             "if domain_maps.json already exists in --output-dir.",
+    )
+    parser.add_argument(
+        "--max-dialogues-per-prompt", type=int, default=None, metavar="N",
+        help="Cap the number of dialogues scored per prompt. Dialogues are taken "
+             "in the order they appear in sampled_dialogues.json (index order). "
+             "Useful for cheap validation runs before a full batch.",
+    )
+    parser.add_argument(
+        "--append", action="store_true",
+        help="Append new scores to an existing scored_results.json rather than "
+             "overwriting it. Already-scored session IDs are skipped, so multiple "
+             "small runs accumulate into one file. The summary is recomputed over "
+             "all combined results after each run.",
+    )
+    parser.add_argument(
+        "--sample-append", action="store_true",
+        help="Append newly sampled prompts to an existing sampled_dialogues.json rather "
+             "than overwriting it. Already-sampled prompt IDs are excluded from the new "
+             "draw so each run adds fresh topics.",
+    )
     args = parser.parse_args()
 
     # Map tabula_rasa alias
@@ -184,39 +227,95 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    sampled_dialogues_path = output_dir / "sampled_dialogues.json"
+    domain_maps_path = output_dir / "domain_maps.json"
+
+    # ---- Stage 1: Parse & Sample (or load from disk) ----
+    if args.from_sample:
+        if not sampled_dialogues_path.exists():
+            print(
+                f"[error] --from-sample requires {sampled_dialogues_path} to exist. "
+                "Run without --from-sample first.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        print(f"\n=== Stage 1: Loading existing sample from {sampled_dialogues_path} ===", flush=True)
+        with open(sampled_dialogues_path) as f:
+            sampled_prompts = json.load(f)
+        total_dialogues = sum(len(p["dialogues"]) for p in sampled_prompts)
+        print(
+            f"[parse] Loaded {len(sampled_prompts)} prompts / {total_dialogues} dialogues",
+            flush=True,
+        )
+    else:
+        print("\n=== Stage 1: Parse & Sample ===", flush=True)
+        existing_sample: list[dict] = []
+        exclude_ids: set[str] = set()
+        if args.sample_append and sampled_dialogues_path.exists():
+            with open(sampled_dialogues_path) as f:
+                existing_sample = json.load(f)
+            exclude_ids = {p["prompt_id"] for p in existing_sample}
+            print(f"[parse] --sample-append: {len(existing_sample)} existing prompts loaded", flush=True)
+        new_prompts = load_and_sample(
+            dataset_name=args.dataset,
+            min_dialogues=args.min_dialogues,
+            min_messages=args.min_messages,
+            sample_size=args.sample_size,
+            seed=args.seed,
+            exclude_ids=exclude_ids,
+        )
+        sampled_prompts = existing_sample + new_prompts
+        with open(sampled_dialogues_path, "w") as f:
+            json.dump(sampled_prompts, f, indent=2)
+        total_dialogues = sum(len(p["dialogues"]) for p in sampled_prompts)
+        print(
+            f"[parse] Wrote {len(sampled_prompts)} prompts / {total_dialogues} dialogues "
+            f"→ {sampled_dialogues_path}",
+            flush=True,
+        )
+
+    # ---- --parse-only: print summary and exit ----
+    if args.parse_only:
+        print("\n=== Selected prompts ===", flush=True)
+        for i, entry in enumerate(sampled_prompts, 1):
+            n = len(entry["dialogues"])
+            q = entry["question_prompt"]
+            q_display = q if len(q) <= 80 else q[:77] + "..."
+            print(f"  {i}. [{entry['prompt_id']}]")
+            print(f"     Topic : {entry['earthscience_topic']}")
+            print(f"     Question: {q_display}")
+            print(f"     Dialogues: {n}")
+        total = sum(len(e["dialogues"]) for e in sampled_prompts)
+        print(f"\nTotal: {len(sampled_prompts)} prompts, {total} dialogues")
+        print(f"Sample written to: {sampled_dialogues_path}")
+        print("\n(--parse-only: stopping before domain map generation and scoring)")
+        return
+
     client = anthropic.Anthropic()
 
-    # ---- Stage 1: Parse & Sample ----
-    print("\n=== Stage 1: Parse & Sample ===", flush=True)
-    sampled_dialogues_path = output_dir / "sampled_dialogues.json"
-    sampled_prompts = load_and_sample(
-        dataset_name=args.dataset,
-        min_dialogues=args.min_dialogues,
-        min_exchanges=args.min_exchanges,
-        sample_size=args.sample_size,
-        seed=args.seed,
-    )
-    with open(sampled_dialogues_path, "w") as f:
-        json.dump(sampled_prompts, f, indent=2)
-    total_dialogues = sum(len(p["dialogues"]) for p in sampled_prompts)
-    print(
-        f"[parse] Wrote {len(sampled_prompts)} prompts / {total_dialogues} dialogues "
-        f"→ {sampled_dialogues_path}",
-        flush=True,
-    )
+    # ---- Stage 2: Domain Maps (or load from disk) ----
+    print(f"\n=== Stage 2: Domain Maps ===", flush=True)
+    domain_maps: dict = {}
+    if args.from_sample and domain_maps_path.exists():
+        with open(domain_maps_path) as f:
+            domain_maps = json.load(f)
+        print(f"[domain-maps] Loaded {len(domain_maps)} cached maps", flush=True)
 
-    # ---- Stage 2: Domain Maps ----
-    print("\n=== Stage 2: Domain Maps ===", flush=True)
-    domain_maps_path = output_dir / "domain_maps.json"
-    domain_maps = generate_domain_maps(sampled_prompts, client)
-    with open(domain_maps_path, "w") as f:
-        json.dump(domain_maps, f, indent=2)
-    print(f"[domain-maps] Wrote {len(domain_maps)} maps → {domain_maps_path}", flush=True)
+    missing = [p for p in sampled_prompts if p["prompt_id"] not in domain_maps]
+    if missing:
+        slim = (args.domain_source == "sentence")
+        new_maps = generate_domain_maps(missing, client, slim=slim)
+        domain_maps.update(new_maps)
+        with open(domain_maps_path, "w") as f:
+            json.dump(domain_maps, f, indent=2)
+        print(f"[domain-maps] Generated {len(new_maps)} new maps → {domain_maps_path}", flush=True)
+    else:
+        print(f"[domain-maps] All {len(domain_maps)} maps already cached", flush=True)
 
     # ---- Stages 3+4: Adapt + Score (parallel) ----
     print(f"\n=== Stages 3+4: Adapt & Score ({args.workers} workers) ===", flush=True)
 
-    # Build work items
+    # Build the candidate work list (all dialogues in the current sample)
     work_items: list[tuple] = []
     for entry in sampled_prompts:
         pid = entry["prompt_id"]
@@ -226,47 +325,95 @@ def main() -> None:
         for dialogue in entry["dialogues"]:
             work_items.append((pid, qp, topic, dialogue, dm))
 
-    scored_results: list[dict] = []
+    # Apply --max-dialogues-per-prompt cap to work items only (not to the saved file)
+    if args.max_dialogues_per_prompt is not None:
+        cap = args.max_dialogues_per_prompt
+        seen: dict[str, int] = {}
+        capped: list[tuple] = []
+        for item in work_items:
+            pid = item[0]
+            seen[pid] = seen.get(pid, 0) + 1
+            if seen[pid] <= cap:
+                capped.append(item)
+        print(
+            f"[score] --max-dialogues-per-prompt={cap}: "
+            f"{len(capped)} of {len(work_items)} dialogues selected",
+            flush=True,
+        )
+        work_items = capped
+
+    # Load existing results and skip already-scored sessions when --append
+    existing_results: list[dict] = []
+    scored_path = output_dir / "scored_results.json"
+    if args.append and scored_path.exists():
+        with open(scored_path) as f:
+            existing_results = json.load(f)
+        already_scored = {r["session_id"] for r in existing_results}
+        before = len(work_items)
+        work_items = [
+            item for item in work_items
+            if f"{item[0]}_{item[3]['dialogue_idx']}" not in already_scored
+        ]
+        skipped = before - len(work_items)
+        print(
+            f"[append] {len(existing_results)} existing records loaded; "
+            f"{skipped} already-scored sessions skipped; "
+            f"{len(work_items)} remaining to score",
+            flush=True,
+        )
+
+    new_results: list[dict] = []
     completed = 0
 
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {
-            pool.submit(
-                _score_one,
-                pid, qp, topic, dialogue, dm,
-                client, bkt_preset,
-                args.nac, args.nac, args.lcq,
-            ): (pid, dialogue["dialogue_idx"])
-            for pid, qp, topic, dialogue, dm in work_items
-        }
-        for future in as_completed(futures):
-            rec = future.result()
-            scored_results.append(rec)
-            completed += 1
-            status = "ERR" if rec.get("error") else "ok"
-            print(
-                f"  [{completed}/{len(work_items)}] {rec['session_id']} [{status}]",
-                flush=True,
-            )
+    if work_items:
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = {
+                pool.submit(
+                    _score_one,
+                    pid, qp, topic, dialogue, dm,
+                    client, bkt_preset,
+                    args.nac, args.nac, args.lcq,
+                ): (pid, dialogue["dialogue_idx"])
+                for pid, qp, topic, dialogue, dm in work_items
+            }
+            for future in as_completed(futures):
+                rec = future.result()
+                new_results.append(rec)
+                completed += 1
+                status = "ERR" if rec.get("error") else "ok"
+                print(
+                    f"  [{completed}/{len(work_items)}] {rec['session_id']} [{status}]",
+                    flush=True,
+                )
+    else:
+        print("[score] Nothing to score — all sessions already present in scored_results.json", flush=True)
 
-    # Sort deterministically: prompt_id, then dialogue_idx
-    scored_results.sort(key=lambda r: (r["prompt_id"], r["session_id"]))
+    # Combine with existing results (if --append), then sort deterministically
+    all_results = existing_results + new_results
+    all_results.sort(key=lambda r: (r["prompt_id"], r["session_id"]))
 
     # ---- Stage 5: Write Results ----
     print("\n=== Stage 5: Write Results ===", flush=True)
 
-    scored_path = output_dir / "scored_results.json"
     with open(scored_path, "w") as f:
-        json.dump(scored_results, f, indent=2)
-    print(f"[results] Wrote {len(scored_results)} records → {scored_path}", flush=True)
+        json.dump(all_results, f, indent=2)
+    if args.append and existing_results:
+        print(
+            f"[results] {len(existing_results)} existing + {len(new_results)} new = "
+            f"{len(all_results)} total records → {scored_path}",
+            flush=True,
+        )
+    else:
+        print(f"[results] Wrote {len(all_results)} records → {scored_path}", flush=True)
 
-    summary = build_summary(sampled_prompts, scored_results)
+    # Summary is built over all combined results using the full sample for prompt labels
+    summary = build_summary(sampled_prompts, all_results)
     summary_path = output_dir / "summary.json"
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
     print(f"[results] Wrote summary ({len(summary)} prompts) → {summary_path}", flush=True)
 
-    error_count = sum(1 for r in scored_results if r.get("error"))
+    error_count = sum(1 for r in new_results if r.get("error"))
     if error_count:
         print(f"\n[WARNING] {error_count} dialogues failed — check error field in scored_results.json", flush=True)
     print("\nDone.", flush=True)
